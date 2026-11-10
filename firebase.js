@@ -31,18 +31,25 @@ async function initialize(config, debug) {
     ? new AgentPlatformBackend("global")
     : new aiSdk.GoogleAIBackend();
   const ai = aiSdk.getAI(app, { backend });
-  return { appCheck, getToken: checkSdk.getToken, ai, getModel: aiSdk.getGenerativeModel };
+  return {
+    appCheck, getToken: checkSdk.getToken, ai,
+    getModel: aiSdk.getGenerativeModel, ThinkingLevel: aiSdk.ThinkingLevel,
+  };
 }
 
-export async function ask({ config, debug, model, turns, prompt, onText, onGenerating }) {
-  const { ai, getModel, appCheck, getToken } = await getService(config, debug);
+export async function ask({ config, debug, model, thinkingLevel, turns, prompt, onText, onGenerating }) {
+  const { ai, getModel, ThinkingLevel, appCheck, getToken } = await getService(config, debug);
   // Give App Check its own error before sending a request to AI Logic.
   try {
     await getToken(appCheck);
   } catch {
     throw new Error("app-check");
   }
-  const generator = getModel(ai, { model, generationConfig: { maxOutputTokens: 8192 } });
+  const generationConfig = { maxOutputTokens: 8192 };
+  if (thinkingLevel) {
+    generationConfig.thinkingConfig = { thinkingLevel: ThinkingLevel[thinkingLevel] };
+  }
+  const generator = getModel(ai, { model, generationConfig });
   const contents = await fitHistory(turns, content("user", prompt), async (messages) => {
     const count = await generator.countTokens({ contents: messages });
     if (!Number.isFinite(count.totalTokens)) throw new Error("token-count");

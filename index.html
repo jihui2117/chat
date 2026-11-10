@@ -37,7 +37,17 @@
     <main>
       <header class="topbar">
         <div class="top-title"><button class="icon-button mobile-menu" id="menu" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="이전 채팅 열기"><svg><use href="#i-menu"/></svg></button><h1 id="chat-title">새 채팅</h1></div>
-        <label class="model-label" for="model">모델 <select id="model"></select></label>
+        <div class="model-controls">
+          <label class="model-label" for="model">모델 <select id="model"></select></label>
+          <label class="model-label" for="thinking-level">추론 단계
+            <select id="thinking-level">
+              <option value="">모델 기본값</option>
+              <option value="LOW">낮음</option>
+              <option value="MEDIUM">중간</option>
+              <option value="HIGH">높음</option>
+            </select>
+          </label>
+        </div>
       </header>
       <section class="usage" aria-label="채팅 사용량">
         <div><span>누적 입력</span><strong id="input-tokens">0</strong></div>
