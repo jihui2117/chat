@@ -5,7 +5,7 @@ import { deleteChat, readChats, readSetting, saveChat, writeSetting } from "./st
 
 const byId = (id) => document.getElementById(id);
 const ui = Object.fromEntries([
-  "history", "new-chat", "chat-title", "model", "input-tokens", "output-tokens",
+  "history", "new-chat", "chat-title", "model", "thinking-level", "input-tokens", "output-tokens",
   "cost-usd", "cost-krw", "rate", "rate-date", "refresh-rate", "usage-note", "conversation",
   "empty", "messages", "compose", "prompt", "send", "status", "sidebar", "menu", "backdrop",
   "settings", "settings-form", "settings-error", "debug-fields", "open-settings",
@@ -178,7 +178,7 @@ async function fetchRate() {
 
 function setBusy(value) {
   busy = value;
-  for (const key of ["model", "new-chat", "open-settings", "send"]) ui[key].disabled = value;
+  for (const key of ["model", "thinking-level", "new-chat", "open-settings", "send"]) ui[key].disabled = value;
   renderHistory();
 }
 
@@ -227,6 +227,7 @@ async function send(event) {
 
   const model = models.find((entry) => entry.id === ui.model.value);
   if (!model || (config.plan === "spark" && model.paid)) return;
+  const thinkingLevel = ui["thinking-level"].value;
   const turn = { id: crypto.randomUUID(), model: model.id, prompt, answer: "", usage: null };
   setBusy(true);
   ui.prompt.value = "";
@@ -237,7 +238,7 @@ async function send(event) {
   announce("연결과 이전 대화를 확인하는 중…");
   try {
     const reply = await ask({
-      config, debug, model: model.id, turns: current.turns, prompt,
+      config, debug, model: model.id, thinkingLevel, turns: current.turns, prompt,
       onGenerating: () => announce("답변을 생성하는 중…"),
       onText: (text) => {
         turn.answer = text;
@@ -315,6 +316,14 @@ async function start() {
   }
   ui["debug-fields"].hidden = !loopback;
   ui.prompt.maxLength = maxPromptChars;
+  const thinking = ui["thinking-level"];
+  const savedThinking = readSetting("thinking-level");
+  if (Array.from(thinking.options).some((option) => option.value === savedThinking)) {
+    thinking.value = savedThinking;
+  }
+  thinking.addEventListener("change", () => {
+    try { writeSetting("thinking-level", thinking.value); } catch { /* Selection still applies to the next message. */ }
+  });
   ui.model.addEventListener("change", () => {
     try { writeSetting("model", ui.model.value); } catch { /* Selection still applies to the next message. */ }
   });
