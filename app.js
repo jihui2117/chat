@@ -105,17 +105,24 @@ function icon(name) {
 
 function renderUsage() {
   const usage = totals(current.turns);
-  ui["input-tokens"].textContent = nf.format(usage.input);
-  ui["output-tokens"].textContent = nf.format(usage.output);
-  ui["cost-usd"].textContent = `$${usage.usd.toFixed(6)}`;
-  ui["cost-krw"].textContent = fx ? `≈ ${won.format(usage.usd * fx.rate)}` : "원화 환산 대기";
+  const formatTotal = (metric, format) => {
+    const missing = usage.missing[metric];
+    if (missing && missing === current.turns.length) return "—";
+    return `${missing ? "≥ " : ""}${format(usage[metric])}`;
+  };
+  ui["input-tokens"].textContent = formatTotal("input", nf.format);
+  ui["output-tokens"].textContent = formatTotal("output", nf.format);
+  ui["cost-usd"].textContent = formatTotal("usd", (value) => `$${value.toFixed(6)}`);
+  ui["cost-krw"].textContent = fx
+    ? formatTotal("usd", (value) => `${usage.missing.usd ? "" : "≈ "}${won.format(value * fx.rate)}`)
+    : "원화 환산 대기";
   ui.rate.textContent = fx ? `₩${nf.format(fx.rate)} / $1` : fxStatus || "불러오는 중";
   ui["rate-date"].textContent = fx
     ? `${fx.date} 기준 · ${fxStatus || checkedAtFormat.format(fx.checkedAt) + " KST 조회"}`
     : "";
   const notes = [];
-  if (usage.thinking) notes.push(`사고 토큰 ${nf.format(usage.thinking)}개는 예상 비용에 반영`);
-  if (usage.incomplete) notes.push("일부 응답의 사용량 미집계");
+  if (usage.thinking) notes.push(`확인된 사고 토큰 ${nf.format(usage.thinking)}개`);
+  if (usage.missing.usd) notes.push(`${nf.format(usage.missing.usd)}개 응답의 사용량 미집계`);
   ui["usage-note"].textContent = notes.join(" · ");
   ui["usage-note"].hidden = notes.length === 0;
 }
@@ -239,32 +246,20 @@ async function send(event) {
   ui.prompt.value = "";
   ui.empty.hidden = true;
   addMessage("user", "나", prompt);
-  const bubble = addMessage("model", model.label, "연결 중…");
+  addMessage("model", model.label, "연결 중…");
   ui.conversation.scrollTop = ui.conversation.scrollHeight;
   announce("연결과 이전 대화를 확인하는 중…");
   try {
     const reply = await ask({
       config, debugToken, model: model.id, thinkingLevel, turns: current.turns, prompt,
       onGenerating: () => announce("답변을 생성하는 중…"),
-      onText: (text) => {
-        turn.answer = text;
-        const stickToBottom = ui.conversation.scrollHeight - ui.conversation.scrollTop -
-          ui.conversation.clientHeight < 100;
-        bubble.textContent = text;
-        if (stickToBottom) ui.conversation.scrollTop = ui.conversation.scrollHeight;
-      },
     });
     Object.assign(turn, reply);
     const saved = await remember(turn);
     announce(saved ? "" : "브라우저 저장에 실패했어요. 현재 탭에서만 대화가 유지됩니다.", !saved);
   } catch (error) {
-    if (turn.answer) {
-      const saved = await remember(turn);
-      announce(saved ? "응답이 중단되어 받은 부분만 저장했어요." : "응답이 중단됐고 브라우저 저장에 실패했어요.", true);
-    } else {
-      if (!ui.prompt.value) ui.prompt.value = prompt;
-      announce(errorMessage(error), true);
-    }
+    if (!ui.prompt.value) ui.prompt.value = prompt;
+    announce(errorMessage(error), true);
   } finally {
     setBusy(false);
     render({ preserveModel: true });

@@ -71,7 +71,7 @@ async function exchangeDebugToken({ projectId, appId, apiKey }, debugToken) {
   return { token, expireTimeMillis };
 }
 
-export async function ask({ config, debugToken, model, thinkingLevel, turns, prompt, onText, onGenerating }) {
+export async function ask({ config, debugToken, model, thinkingLevel, turns, prompt, onGenerating }) {
   const { ai, getModel, ThinkingLevel, appCheck, getToken } = await getService(config, debugToken);
   // Give App Check its own error before sending a request to AI Logic.
   try {
@@ -93,20 +93,13 @@ export async function ask({ config, debugToken, model, thinkingLevel, turns, pro
 
   onGenerating();
   const requestDate = new Date().toISOString().slice(0, 10);
-  const { stream, response } = await generator.generateContentStream({ contents });
-  // Observe both promises even when the stream fails before the final response.
-  void response.catch(() => {});
-  let text = "";
-  for await (const chunk of stream) {
-    const delta = chunk.candidates?.[0]?.content?.parts?.length ? chunk.text() : "";
-    if (delta) {
-      text += delta;
-      onText(text);
-    }
-  }
-  const final = await response;
-  const hasFinalParts = final.candidates?.[0]?.content?.parts?.length;
-  const answer = text || (hasFinalParts ? final.text() : "");
-  const usage = measureUsage(final.usageMetadata, model, config.plan, requestDate);
+  // Use the full API response so token accounting doesn't depend on the SDK's
+  // aggregation of streaming chunks.
+  const { response } = await generator.generateContent({ contents });
+  const hasParts = response.candidates?.[0]?.content?.parts?.length;
+  const answer = hasParts ? response.text() : "";
+  const metadata = response.usageMetadata;
+  const usageMetadata = metadata && !hasParts ? { candidatesTokenCount: 0, ...metadata } : metadata;
+  const usage = measureUsage(usageMetadata, model, config.plan, requestDate);
   return { answer, usage };
 }

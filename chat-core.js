@@ -31,8 +31,7 @@ function tokenCount(value) {
 
 export function measureUsage(metadata, model, plan, date = new Date().toISOString().slice(0, 10)) {
   const input = tokenCount(metadata?.promptTokenCount);
-  // A prompt can complete without a visible candidate, for example after safety filtering.
-  const output = tokenCount(metadata?.candidatesTokenCount) ?? (input === null ? null : 0);
+  const output = tokenCount(metadata?.candidatesTokenCount);
   const thinking = tokenCount(metadata?.thoughtsTokenCount) ?? 0;
   const table = modelRates[model];
   let usd = null;
@@ -49,13 +48,14 @@ export function measureUsage(metadata, model, plan, date = new Date().toISOStrin
 }
 
 export function totals(turns) {
-  const result = { input: 0, output: 0, thinking: 0, usd: 0, incomplete: false };
+  const result = { input: 0, output: 0, thinking: 0, usd: 0, missing: { input: 0, output: 0, usd: 0 } };
   for (const { usage } of turns) {
-    result.input += usage?.input ?? 0;
-    result.output += usage?.output ?? 0;
+    for (const metric of ["input", "output", "usd"]) {
+      const value = usage?.[metric];
+      if (value == null) result.missing[metric]++;
+      else result[metric] += value;
+    }
     result.thinking += usage?.thinking ?? 0;
-    result.usd += usage?.usd ?? 0;
-    result.incomplete ||= usage?.usd == null;
   }
   return result;
 }
