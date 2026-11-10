@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f8f3">
+  <meta name="description" content="Firebase AI Logic과 연결하는 브라우저 채팅 앱">
+  <title>아르곤 챗</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M19 15a2 2 0 0 1-2 2H9l-4 3V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2zM9 9h6m-6 4h4"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="m9 4-.5 2.4-2 .9L4 6.6 2.5 9.2l1.7 1.8v2L2.5 15 4 17.5l2.5-.7 2 1L9 20h3l.6-2.2 2-1 2.4.7 1.5-2.5-1.7-2v-2l1.7-1.8L17 6.6l-2.4.7-2-.9L12 4z" transform="translate(1.5)"/><circle cx="12" cy="12" r="2.8"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-.5 5.5M20 4v6h-6"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></symbol>
+  </svg>
+  <div class="shell">
+    <button class="backdrop" id="backdrop" type="button" aria-label="사이드바 닫기" hidden></button>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><img src="./icon.svg" alt="" width="36" height="36"><span>아르곤 챗<small>FIREBASE AI WORKSPACE</small></span></div>
+      <button class="new-chat" id="new-chat" type="button"><svg><use href="#i-plus"/></svg>새 채팅</button>
+      <section class="history" aria-label="이전 채팅">
+        <h2>이전 채팅</h2>
+        <ul id="history"></ul>
+      </section>
+      <div class="side-bottom">
+        <button class="side-settings" id="open-settings" type="button"><svg><use href="#i-gear"/></svg>연결 설정</button>
+        <p><span class="dot"></span>이 브라우저에 대화 저장</p>
+      </div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div class="top-title"><button class="icon-button mobile-menu" id="menu" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="이전 채팅 열기"><svg><use href="#i-menu"/></svg></button><h1 id="chat-title">새 채팅</h1></div>
+        <label class="model-label" for="model">모델 <select id="model"></select></label>
+      </header>
+      <section class="usage" aria-label="채팅 사용량">
+        <div><span>누적 입력</span><strong id="input-tokens">0</strong></div>
+        <div><span>누적 출력</span><strong id="output-tokens">0</strong></div>
+        <div class="cost"><span>예상 비용</span><strong id="cost-usd">$0.0000</strong><small id="cost-krw"></small></div>
+        <div class="exchange"><span>USD/KRW · 일일 기준환율 <button class="icon-button refresh" id="refresh-rate" type="button" aria-label="환율 새로고침"><svg><use href="#i-refresh"/></svg></button></span><strong id="rate">불러오는 중</strong><small id="rate-date"></small></div>
+        <p class="usage-note" id="usage-note" hidden></p>
+      </section>
+      <div class="conversation" id="conversation">
+        <section class="empty" id="empty">
+          <img src="./icon.svg" alt="" width="63" height="63">
+          <p class="eyebrow">GEMINI CHAT</p>
+          <h2>무엇이 궁금하세요?</h2>
+          <p>질문이나 아이디어를 적어보세요.</p>
+          <button class="outline" type="button" id="empty-settings">Firebase 연결 설정</button>
+        </section>
+        <div class="messages" id="messages" aria-label="대화"></div>
+      </div>
+      <footer class="compose-area">
+        <form id="compose">
+          <label class="sr-only" for="prompt">메시지</label>
+          <textarea id="prompt" placeholder="메시지를 입력하세요" rows="2" required></textarea>
+          <button class="send" id="send" type="submit" aria-label="메시지 보내기"><svg><use href="#i-up"/></svg></button>
+        </form>
+        <p id="status" role="status" aria-live="polite"></p>
+        <p class="hint">최근 20턴 · 이전 대화 최대 10,000토큰</p>
+      </footer>
+    </main>
+  </div>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <form id="settings-form">
+      <header class="dialog-head"><div><p class="eyebrow">FIREBASE AI LOGIC</p><h2 id="settings-title">연결 설정</h2></div><button class="icon-button" id="close-settings" type="button" aria-label="설정 닫기"><svg><use href="#i-x"/></svg></button></header>
+      <p class="dialog-copy">Firebase 웹 앱의 공개 설정값을 입력하세요. 앱에서 저장한 설정은 이 브라우저에만 적용됩니다.</p>
+      <div class="fields">
+        <label>프로젝트 ID<input name="projectId" autocomplete="off" required placeholder="my-project"></label>
+        <label>웹 앱 ID<input name="appId" autocomplete="off" required placeholder="1:…:web:…"></label>
+        <label>Firebase 웹 API 키<input name="apiKey" type="password" autocomplete="off" required placeholder="Firebase 웹 설정의 apiKey"></label>
+        <label>reCAPTCHA Enterprise 사이트 키<input name="siteKey" autocomplete="off" placeholder="운영 도메인에 등록한 공개 사이트 키"></label>
+        <label>AI 제공자<select name="backend"><option value="vertex">Vertex AI (Agent Platform)</option><option value="developer">Gemini Developer API</option></select></label>
+        <label>Firebase 요금제<select name="plan"><option value="blaze">Blaze (유료 종량제)</option><option value="spark">Spark (무료)</option></select></label>
+      </div>
+      <fieldset id="debug-fields" hidden>
+        <legend>로컬 테스트</legend>
+        <label class="check"><input name="debugEnabled" type="checkbox">App Check 디버그 모드</label>
+        <label>디버그 토큰<input name="debugToken" type="password" autocomplete="off" placeholder="비우면 개발자 콘솔에서 생성"></label>
+        <p class="dialog-copy">Firebase 콘솔에 등록한 토큰을 사용하세요. 이 화면의 입력값은 탭 세션에만 저장합니다.</p>
+      </fieldset>
+      <p id="settings-error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="outline" id="reset-settings">배포 설정 사용</button><button type="submit" class="primary">저장 및 적용</button></div>
+    </form>
+  </dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
