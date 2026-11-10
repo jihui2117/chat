@@ -185,9 +185,26 @@ function setBusy(value) {
 function errorMessage(error) {
   const details = String(error?.message ?? "");
   if (details === "app-check") {
-    return loopback
-      ? "App Check 인증이 실패했어요. 개발자 도구에서 발급된 토큰을 확인하고 Firebase 콘솔에 등록해 주세요."
-      : "App Check 인증이 실패했어요. reCAPTCHA 사이트 키와 허용 도메인을 확인해 주세요.";
+    const code = error.cause?.code;
+    const httpStatus = Number(error.cause?.customData?.httpStatus);
+    const diagnostics = [
+      /^appCheck\/[a-z-]+$/i.test(code) ? code : "",
+      Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus <= 599 ? `HTTP ${httpStatus}` : "",
+    ].filter(Boolean).join(" · ");
+    const headline = `App Check 인증이 실패했어요${diagnostics ? ` (${diagnostics})` : ""}.`;
+    if (loopback && debug.enabled) {
+      return `${headline} Firebase 콘솔에서 이 웹 앱에 등록된 디버그 토큰을 확인해 주세요.`;
+    }
+    if (code === "appCheck/recaptcha-error") {
+      return `${headline} reCAPTCHA Enterprise 사이트 키와 허용 도메인을 확인해 주세요.`;
+    }
+    if (httpStatus === 403) {
+      return `${headline} Firebase 콘솔에서 웹 앱의 App Check 등록과 웹 API 키의 Firebase App Check API 허용 여부를 확인해 주세요.`;
+    }
+    if (code === "appCheck/fetch-network-error") {
+      return `${headline} 브라우저에서 Firebase App Check에 연결하지 못했어요.`;
+    }
+    return `${headline} Firebase 콘솔에서 이 웹 앱의 App Check 등록 상태를 확인해 주세요.`;
   }
   if (details === "token-count") return "이전 대화의 토큰 수를 확인할 수 없었어요. 잠시 후 다시 시도해 주세요.";
   if (/429|quota|resource.exhausted/i.test(details)) return "Firebase 사용량 한도에 도달했어요. 잠시 후 다시 시도해 주세요.";
