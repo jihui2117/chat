@@ -80,23 +80,17 @@
   <dialog id="settings" aria-labelledby="settings-title">
     <form id="settings-form">
       <header class="dialog-head"><div><p class="eyebrow">FIREBASE AI LOGIC</p><h2 id="settings-title">연결 설정</h2></div><button class="icon-button" id="close-settings" type="button" aria-label="설정 닫기"><svg><use href="#i-x"/></svg></button></header>
-      <p class="dialog-copy">Firebase 웹 앱의 공개 설정값을 입력하세요. 앱에서 저장한 설정은 이 브라우저에만 적용됩니다.</p>
+      <p class="dialog-copy">본인 소유의 테스트용 Firebase 프로젝트를 연결하세요. 디버그 토큰은 이 탭 세션에만 보관됩니다.</p>
       <div class="fields">
         <label>프로젝트 ID<input name="projectId" autocomplete="off" required placeholder="my-project"></label>
         <label>웹 앱 ID<input name="appId" autocomplete="off" required placeholder="1:…:web:…"></label>
         <label>Firebase 웹 API 키<input name="apiKey" type="password" autocomplete="off" required placeholder="Firebase 웹 설정의 apiKey"></label>
-        <label>reCAPTCHA Enterprise 사이트 키<input name="siteKey" autocomplete="off" placeholder="운영 도메인에 등록한 공개 사이트 키"></label>
+        <label>App Check 디버그 토큰<input name="debugToken" type="password" autocomplete="off" required placeholder="이 웹 앱의 App Check에 등록한 토큰"></label>
         <label>AI 제공자<select name="backend"><option value="vertex">Vertex AI (Agent Platform)</option><option value="developer">Gemini Developer API</option></select></label>
         <label>Firebase 요금제<select name="plan"><option value="blaze">Blaze (유료 종량제)</option><option value="spark">Spark (무료)</option></select></label>
       </div>
-      <fieldset id="debug-fields" hidden>
-        <legend>로컬 테스트</legend>
-        <label class="check"><input name="debugEnabled" type="checkbox">App Check 디버그 모드</label>
-        <label>디버그 토큰<input name="debugToken" type="password" autocomplete="off" placeholder="비우면 개발자 콘솔에서 생성"></label>
-        <p class="dialog-copy">Firebase 콘솔에 등록한 토큰을 사용하세요. 이 화면의 입력값은 탭 세션에만 저장합니다.</p>
-      </fieldset>
       <p id="settings-error" role="alert"></p>
-      <div class="dialog-actions"><button type="button" class="outline" id="reset-settings">배포 설정 사용</button><button type="submit" class="primary">저장 및 적용</button></div>
+      <div class="dialog-actions"><button type="button" class="outline" id="reset-settings">연결 설정 지우기</button><button type="submit" class="primary">저장 및 적용</button></div>
     </form>
   </dialog>
   <script type="module" src="./app.js"></script>

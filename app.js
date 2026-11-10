@@ -1,4 +1,3 @@
-import { deployment } from "./config.js";
 import { defaultModel, maxPromptChars, models, totals } from "./chat-core.js";
 import { ask } from "./firebase.js";
 import { deleteChat, readChats, readSetting, saveChat, writeSetting } from "./storage.js";
@@ -8,15 +7,14 @@ const ui = Object.fromEntries([
   "history", "new-chat", "chat-title", "model", "thinking-level", "input-tokens", "output-tokens",
   "cost-usd", "cost-krw", "rate", "rate-date", "refresh-rate", "usage-note", "conversation",
   "empty", "messages", "compose", "prompt", "send", "status", "sidebar", "menu", "backdrop",
-  "settings", "settings-form", "settings-error", "debug-fields", "open-settings",
+  "settings", "settings-form", "settings-error", "open-settings",
   "empty-settings", "close-settings", "reset-settings",
 ].map((id) => [id, byId(id)]));
 
-const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
-const config = { ...deployment, ...readSetting("firebase") };
+const { debugToken = "", ...sessionConfig } = readSetting("personal-connection", true) ?? {};
+const config = { backend: "vertex", plan: "blaze", ...readSetting("firebase"), ...sessionConfig };
 if (config.backend === "vertex") config.plan = "blaze";
-const debug = loopback ? readSetting("debug", true) ?? {} : {};
-const configured = Boolean(config.projectId && config.appId && config.apiKey && (config.siteKey || debug.enabled));
+const configured = Boolean(config.projectId && config.appId && config.apiKey && debugToken);
 const nf = new Intl.NumberFormat("ko-KR");
 const won = new Intl.NumberFormat("ko-KR", {
   style: "currency", currency: "KRW", maximumFractionDigits: 2,
@@ -192,19 +190,10 @@ function errorMessage(error) {
       Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus <= 599 ? `HTTP ${httpStatus}` : "",
     ].filter(Boolean).join(" · ");
     const headline = `App Check 인증이 실패했어요${diagnostics ? ` (${diagnostics})` : ""}.`;
-    if (loopback && debug.enabled) {
-      return `${headline} Firebase 콘솔에서 이 웹 앱에 등록된 디버그 토큰을 확인해 주세요.`;
-    }
-    if (code === "appCheck/recaptcha-error") {
-      return `${headline} reCAPTCHA Enterprise 사이트 키와 허용 도메인을 확인해 주세요.`;
-    }
-    if (httpStatus === 403) {
-      return `${headline} Firebase 콘솔에서 웹 앱의 App Check 등록과 웹 API 키의 Firebase App Check API 허용 여부를 확인해 주세요.`;
-    }
     if (code === "appCheck/fetch-network-error") {
       return `${headline} 브라우저에서 Firebase App Check에 연결하지 못했어요.`;
     }
-    return `${headline} Firebase 콘솔에서 이 웹 앱의 App Check 등록 상태를 확인해 주세요.`;
+    return `${headline} Firebase 콘솔의 이 웹 앱에 등록된 디버그 토큰과 연결 설정의 웹 앱 ID를 확인해 주세요.`;
   }
   if (details === "token-count") return "이전 대화의 토큰 수를 확인할 수 없었어요. 잠시 후 다시 시도해 주세요.";
   if (/429|quota|resource.exhausted/i.test(details)) return "Firebase 사용량 한도에 도달했어요. 잠시 후 다시 시도해 주세요.";
@@ -255,7 +244,7 @@ async function send(event) {
   announce("연결과 이전 대화를 확인하는 중…");
   try {
     const reply = await ask({
-      config, debug, model: model.id, thinkingLevel, turns: current.turns, prompt,
+      config, debugToken, model: model.id, thinkingLevel, turns: current.turns, prompt,
       onGenerating: () => announce("답변을 생성하는 중…"),
       onText: (text) => {
         turn.answer = text;
@@ -283,20 +272,18 @@ async function send(event) {
 }
 
 const fields = ui["settings-form"].elements;
+const configFields = ["projectId", "appId", "apiKey", "backend", "plan"];
 function updateSettingsForm() {
   if (fields.backend.value === "vertex") fields.plan.value = "blaze";
   fields.plan.disabled = fields.backend.value === "vertex";
-  fields.debugToken.disabled = !fields.debugEnabled.checked;
-  fields.siteKey.required = !loopback || !fields.debugEnabled.checked;
 }
 
 function openSettings() {
   if (busy) return;
-  for (const name of ["projectId", "appId", "apiKey", "siteKey", "backend", "plan"]) {
+  for (const name of configFields) {
     fields[name].value = config[name] ?? "";
   }
-  fields.debugEnabled.checked = Boolean(debug.enabled);
-  fields.debugToken.value = debug.token ?? "";
+  fields.debugToken.value = debugToken;
   ui["settings-error"].textContent = "";
   updateSettingsForm();
   ui.settings.showModal();
@@ -304,22 +291,21 @@ function openSettings() {
 
 function saveSettings(event) {
   event.preventDefault();
-  const useDebug = loopback && fields.debugEnabled.checked;
-  const updated = {};
-  for (const name of ["projectId", "appId", "apiKey", "siteKey", "backend", "plan"]) {
-    updated[name] = fields[name].value.trim();
-  }
-  if (!updated.projectId || !updated.appId || !updated.apiKey || (!updated.siteKey && !useDebug)) {
-    ui["settings-error"].textContent = "Firebase 웹 설정과 App Check 설정을 확인해 주세요.";
+  const updated = Object.fromEntries(configFields.map((name) => [name, fields[name].value.trim()]));
+  const token = fields.debugToken.value.trim();
+  if (!updated.projectId || !updated.appId || !updated.apiKey || !token) {
+    ui["settings-error"].textContent = "프로젝트 ID, 웹 앱 ID, Firebase 웹 API 키, 디버그 토큰을 모두 입력해 주세요.";
     return;
   }
   try {
-    writeSetting("firebase", updated);
-    if (loopback) writeSetting("debug", useDebug ? { enabled: true, token: fields.debugToken.value.trim() } : null, true);
-    location.reload();
+    // Keep the token and its Firebase app together even if another tab edits its settings.
+    writeSetting("personal-connection", { ...updated, debugToken: token }, true);
   } catch {
-    ui["settings-error"].textContent = "브라우저에 설정을 저장할 수 없어요.";
+    ui["settings-error"].textContent = "이 탭에 연결 설정을 저장할 수 없어요.";
+    return;
   }
+  try { writeSetting("firebase", updated); } catch { /* The connection is saved for this tab. */ }
+  location.reload();
 }
 
 async function start() {
@@ -331,7 +317,6 @@ async function start() {
     }
     ui.model.append(option);
   }
-  ui["debug-fields"].hidden = !loopback;
   ui.prompt.maxLength = maxPromptChars;
   const thinking = ui["thinking-level"];
   const savedThinking = readSetting("thinking-level");
@@ -360,15 +345,15 @@ async function start() {
   ui["close-settings"].addEventListener("click", () => ui.settings.close());
   ui["settings-form"].addEventListener("submit", saveSettings);
   fields.backend.addEventListener("change", updateSettingsForm);
-  fields.debugEnabled.addEventListener("change", updateSettingsForm);
   ui["reset-settings"].addEventListener("click", () => {
     try {
+      writeSetting("personal-connection", null, true);
       writeSetting("firebase", null);
-      if (loopback) writeSetting("debug", null, true);
-      location.reload();
     } catch {
       ui["settings-error"].textContent = "이 브라우저에서 저장된 설정을 지울 수 없어요.";
+      return;
     }
+    location.reload();
   });
   ui.compose.addEventListener("submit", send);
   ui.prompt.addEventListener("keydown", (event) => {
