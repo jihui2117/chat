@@ -6,4 +6,5 @@ export const deployment = {
     storageBucket: "test-9063b.firebasestorage.app",
     messagingSenderId: "12875994774",
     appId: "1:12875994774:web:9a49556c3cf85ea3f194b7"
+    siteKey: "6Ld42hguAAAAAGI-uZmywnI1MIQAUOh1Xr9Krf5o",
   };
