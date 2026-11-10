@@ -42,8 +42,8 @@ export async function ask({ config, debug, model, thinkingLevel, turns, prompt, 
   // Give App Check its own error before sending a request to AI Logic.
   try {
     await getToken(appCheck);
-  } catch {
-    throw new Error("app-check");
+  } catch (cause) {
+    throw new Error("app-check", { cause });
   }
   const generationConfig = { maxOutputTokens: 8192 };
   if (thinkingLevel) {
