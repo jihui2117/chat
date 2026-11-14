@@ -49,6 +49,49 @@ export async function saveChat(chat, { saveInstructions = false } = {}) {
   return merged;
 }
 
+export async function importChats(chats) {
+  const counts = { added: 0, updated: 0, skipped: 0 };
+  let visibleChats;
+  await transaction("readwrite", (store) => {
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const storedChats = new Map(request.result.map((chat) => [chat.id, chat]));
+      for (const chat of chats) {
+        const stored = storedChats.get(chat.id);
+        if (!stored) {
+          store.add(chat);
+          storedChats.set(chat.id, chat);
+          counts.added++;
+          continue;
+        }
+        if (stored.deleted) {
+          counts.skipped++;
+          continue;
+        }
+        const ids = new Set(stored.turns.map(({ id }) => id));
+        const newTurns = chat.turns.filter(({ id }) => !ids.has(id));
+        if (!newTurns.length && (stored.instructions != null || !chat.instructions)) {
+          counts.skipped++;
+          continue;
+        }
+        const merged = {
+          ...stored,
+          title: stored.turns.length ? stored.title : chat.title,
+          updatedAt: Math.max(stored.updatedAt, chat.updatedAt),
+          instructions: stored.instructions ?? chat.instructions,
+          turns: [...stored.turns, ...newTurns],
+        };
+        store.put(merged);
+        storedChats.set(chat.id, merged);
+        counts.updated++;
+      }
+      visibleChats = Array.from(storedChats.values()).filter((chat) => !chat.deleted);
+    };
+    return request;
+  });
+  return { counts, chats: visibleChats };
+}
+
 // Keep a content-free tombstone so another open tab cannot restore a deleted chat.
 export const deleteChat = (id) => transaction("readwrite", (store) => store.put({ id, deleted: true }));
 

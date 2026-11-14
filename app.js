@@ -2,7 +2,8 @@ import { defaultModel, instructionsForTurn, maxPromptChars, models, totals } fro
 import { ask } from "./firebase.js";
 import { askClaude } from "./claude.js";
 import { askOpenRouter } from "./openrouter.js";
-import { deleteChat, readChats, readSetting, saveChat, writeSetting } from "./storage.js";
+import { makeBackup, readBackup } from "./backup.js";
+import { deleteChat, importChats, readChats, readSetting, saveChat, writeSetting } from "./storage.js";
 
 const byId = (id) => document.getElementById(id);
 const ui = Object.fromEntries([
@@ -13,6 +14,7 @@ const ui = Object.fromEntries([
   "openrouter-settings", "empty-settings", "close-settings", "reset-settings", "history-hint",
   "instructions", "instructions-form", "instructions-error", "open-instructions", "close-instructions",
   "copy-status",
+  "backup", "open-backup", "close-backup", "export-backup", "choose-backup", "backup-file", "backup-status",
 ].map((id) => [id, byId(id)]));
 
 const { debugToken = "", ...sessionConfig } = readSetting("personal-connection", true) ?? {};
@@ -259,7 +261,7 @@ async function fetchRate() {
 
 function setBusy(value) {
   busy = value;
-  for (const key of ["provider", "model", "thinking-level", "new-chat", "open-settings", "open-instructions", "send"]) {
+  for (const key of ["provider", "model", "thinking-level", "new-chat", "open-settings", "open-instructions", "open-backup", "send"]) {
     ui[key].disabled = value;
   }
   renderHistory();
@@ -350,6 +352,78 @@ async function send(event) {
 }
 
 const instructionFields = ui["instructions-form"].elements;
+
+function backupStatus(text, error = false) {
+  ui["backup-status"].textContent = text;
+  ui["backup-status"].classList.toggle("error", error);
+}
+
+function exportBackup() {
+  let url;
+  try {
+    const json = makeBackup(chats, readSetting("common-instructions") ?? "");
+    url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "argon-chat-backup.json";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    backupStatus(`백업 파일 다운로드를 요청했어요. 대화 ${nf.format(chats.length)}개를 담았어요.`);
+  } catch {
+    backupStatus("백업 파일을 만들 수 없어요. 다시 시도해 주세요.", true);
+  } finally {
+    if (url) setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+}
+
+async function restoreBackup(event) {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file || busy) return;
+  setBusy(true);
+  for (const key of ["close-backup", "export-backup", "choose-backup"]) ui[key].disabled = true;
+  backupStatus("백업 파일을 읽고 있어요…");
+  try {
+    let backup;
+    try {
+      backup = readBackup(await file.text());
+    } catch {
+      backupStatus("아르곤 챗 백업 파일을 읽을 수 없어요. 내보내기로 만든 JSON 파일을 선택해 주세요.", true);
+      return;
+    }
+    const imported = await importChats(backup.chats);
+    const byChatId = new Map(chats.map((chat) => [chat.id, chat]));
+    for (const chat of imported.chats) byChatId.set(chat.id, chat);
+    chats = [...byChatId.values()];
+    const updatedCurrent = chats.find(({ id }) => id === current.id);
+    if (updatedCurrent) current = updatedCurrent;
+    render({ preserveModel: true });
+
+    const { added, updated, skipped } = imported.counts;
+    const summary = `가져오기 완료 · 새 대화 ${nf.format(added)}개 · 업데이트 ${nf.format(updated)}개 · 건너뜀 ${nf.format(skipped)}개`;
+    const common = readSetting("common-instructions") ?? "";
+    let note = "";
+    let settingsError = false;
+    if (backup.commonInstructions && !common) {
+      try {
+        writeSetting("common-instructions", backup.commonInstructions);
+        note = "공통 지침도 가져왔어요.";
+      } catch {
+        note = "공통 지침을 저장할 수 없어요.";
+        settingsError = true;
+      }
+    } else if (backup.commonInstructions && common !== backup.commonInstructions) {
+      note = "이 브라우저에 저장된 공통 지침을 유지했어요.";
+    }
+    backupStatus([summary, note].filter(Boolean).join("\n"), settingsError);
+  } catch {
+    backupStatus("대화를 이 브라우저에 저장할 수 없어요. 다시 시도해 주세요.", true);
+  } finally {
+    for (const key of ["close-backup", "export-backup", "choose-backup"]) ui[key].disabled = false;
+    setBusy(false);
+  }
+}
 
 function openInstructions() {
   if (busy) return;
@@ -494,6 +568,16 @@ async function start() {
   ui.menu.addEventListener("click", () => setSidebar(!ui.sidebar.classList.contains("open")));
   ui.backdrop.addEventListener("click", () => { setSidebar(false); ui.menu.focus(); });
   ui["refresh-rate"].addEventListener("click", fetchRate);
+  ui["open-backup"].addEventListener("click", () => {
+    if (busy) return;
+    backupStatus("");
+    ui.backup.showModal();
+  });
+  ui["close-backup"].addEventListener("click", () => ui.backup.close());
+  ui.backup.addEventListener("cancel", (event) => { if (busy) event.preventDefault(); });
+  ui["export-backup"].addEventListener("click", exportBackup);
+  ui["choose-backup"].addEventListener("click", () => ui["backup-file"].click());
+  ui["backup-file"].addEventListener("change", restoreBackup);
   ui["open-instructions"].addEventListener("click", openInstructions);
   ui["close-instructions"].addEventListener("click", () => ui.instructions.close());
   ui["instructions-form"].addEventListener("submit", saveInstructions);

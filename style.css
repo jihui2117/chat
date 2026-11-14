@@ -89,6 +89,10 @@ dialog::backdrop{background:#122e24a0}
 .connection-fields{min-width:0;margin:0;padding:0;border:0}
 .fields .full-field{grid-column:1/-1}
 .dialog-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:14px}
+.backup-actions button{min-height:40px}
+.backup-status{font-size:.82rem;color:var(--muted);line-height:1.5;margin:12px 0 0;white-space:pre-line}
+.backup-status.error{color:var(--danger)}
+.backup-status:empty{display:none}
 .outline,.primary{padding:7px 11px;font-size:.83rem}
 .outline{background:transparent;border:1px solid #b9c9b9;border-radius:8px;font-weight:600}
 #settings-error,.form-error{font-size:.78rem}
