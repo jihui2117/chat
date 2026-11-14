@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f8f8f3">
-  <meta name="description" content="Firebase AI Logic과 연결하는 브라우저 채팅 앱">
+  <meta name="description" content="Gemini와 Claude를 연결하는 브라우저 채팅 앱">
   <title>아르곤 챗</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
@@ -23,7 +23,7 @@
   <div class="shell">
     <button class="backdrop" id="backdrop" type="button" aria-label="사이드바 닫기" hidden></button>
     <aside class="sidebar" id="sidebar">
-      <div class="brand"><img src="./icon.svg" alt="" width="36" height="36"><span>아르곤 챗<small>FIREBASE AI WORKSPACE</small></span></div>
+      <div class="brand"><img src="./icon.svg" alt="" width="36" height="36"><span>아르곤 챗</span></div>
       <button class="new-chat" id="new-chat" type="button"><svg><use href="#i-plus"/></svg>새 채팅</button>
       <section class="history" aria-label="이전 채팅">
         <h2>이전 채팅</h2>
@@ -38,6 +38,13 @@
       <header class="topbar">
         <div class="top-title"><button class="icon-button mobile-menu" id="menu" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="이전 채팅 열기"><svg><use href="#i-menu"/></svg></button><h1 id="chat-title">새 채팅</h1></div>
         <div class="model-controls">
+          <label class="model-label" for="provider">AI 서비스
+            <select id="provider">
+              <option value="gemini">Gemini</option>
+              <option value="claude">Claude</option>
+              <option value="openrouter">OpenRouter</option>
+            </select>
+          </label>
           <label class="model-label" for="model">모델 <select id="model"></select></label>
           <label class="model-label" for="thinking-level">추론 단계
             <select id="thinking-level">
@@ -59,7 +66,6 @@
       <div class="conversation" id="conversation">
         <section class="empty" id="empty">
           <img src="./icon.svg" alt="" width="63" height="63">
-          <p class="eyebrow">GEMINI CHAT</p>
           <h2>무엇이 궁금하세요?</h2>
           <p>질문이나 아이디어를 적어보세요.</p>
           <button class="outline" type="button" id="empty-settings">Firebase 연결 설정</button>
@@ -73,22 +79,43 @@
           <button class="send" id="send" type="submit" aria-label="메시지 보내기"><svg><use href="#i-up"/></svg></button>
         </form>
         <p id="status" role="status" aria-live="polite"></p>
-        <p class="hint">최근 20턴 · 이전 대화 최대 10,000토큰</p>
+        <p class="hint" id="history-hint">최근 20턴 · 이전 대화 최대 10,000토큰</p>
       </footer>
     </main>
   </div>
   <dialog id="settings" aria-labelledby="settings-title">
-    <form id="settings-form">
-      <header class="dialog-head"><div><p class="eyebrow">FIREBASE AI LOGIC</p><h2 id="settings-title">연결 설정</h2></div><button class="icon-button" id="close-settings" type="button" aria-label="설정 닫기"><svg><use href="#i-x"/></svg></button></header>
-      <p class="dialog-copy">본인 소유의 테스트용 Firebase 프로젝트를 연결하세요. 디버그 토큰은 이 탭 세션에만 보관됩니다.</p>
-      <div class="fields">
+    <form id="settings-form" method="dialog">
+      <header class="dialog-head"><h2 id="settings-title">연결 설정</h2><button class="icon-button" id="close-settings" type="button" aria-label="설정 닫기"><svg><use href="#i-x"/></svg></button></header>
+      <label class="settings-provider">AI 서비스
+        <select name="provider">
+          <option value="gemini">Gemini (Firebase)</option>
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="openrouter">OpenRouter</option>
+        </select>
+      </label>
+      <fieldset class="connection-fields" id="gemini-settings" aria-label="Gemini 연결 설정">
+        <p class="dialog-copy">본인 소유의 테스트용 Firebase 프로젝트를 연결하세요. 디버그 토큰은 이 탭 세션에만 보관됩니다.</p>
+        <div class="fields">
         <label>프로젝트 ID<input name="projectId" autocomplete="off" required placeholder="my-project"></label>
         <label>웹 앱 ID<input name="appId" autocomplete="off" required placeholder="1:…:web:…"></label>
         <label>Firebase 웹 API 키<input name="apiKey" type="password" autocomplete="off" required placeholder="Firebase 웹 설정의 apiKey"></label>
         <label>App Check 디버그 토큰<input name="debugToken" type="password" autocomplete="off" required placeholder="이 웹 앱의 App Check에 등록한 토큰"></label>
         <label>AI 제공자<select name="backend"><option value="vertex">Vertex AI (Agent Platform)</option><option value="developer">Gemini Developer API</option></select></label>
         <label>Firebase 요금제<select name="plan"><option value="blaze">Blaze (유료 종량제)</option><option value="spark">Spark (무료)</option></select></label>
-      </div>
+        </div>
+      </fieldset>
+      <fieldset class="connection-fields" id="claude-settings" aria-label="Claude 연결 설정" hidden disabled>
+        <p class="dialog-copy">본인의 Claude Console API 키를 입력하세요. 키는 이 탭 세션에 저장되며 요청은 브라우저에서 Anthropic으로 직접 전송됩니다.</p>
+        <div class="fields">
+          <label class="full-field">Claude API 키<input name="claudeKey" type="password" autocomplete="off" spellcheck="false" required placeholder="sk-ant-…"></label>
+        </div>
+      </fieldset>
+      <fieldset class="connection-fields" id="openrouter-settings" aria-label="OpenRouter 연결 설정" hidden disabled>
+        <p class="dialog-copy"><a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">OpenRouter에서 발급한 API 키</a>를 입력하세요. 키는 이 탭 세션에 저장되며, 대화는 브라우저에서 OpenRouter로 전송됩니다. Claude 사용료는 OpenRouter 크레딧에서 차감됩니다.</p>
+        <div class="fields">
+          <label class="full-field">OpenRouter API 키<input name="openrouterKey" type="password" autocomplete="off" spellcheck="false" required placeholder="sk-or-v1-…"></label>
+        </div>
+      </fieldset>
       <p id="settings-error" role="alert"></p>
       <div class="dialog-actions"><button type="button" class="outline" id="reset-settings">연결 설정 지우기</button><button type="submit" class="primary">저장 및 적용</button></div>
     </form>

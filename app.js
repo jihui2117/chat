@@ -1,20 +1,48 @@
 import { defaultModel, maxPromptChars, models, totals } from "./chat-core.js";
 import { ask } from "./firebase.js";
+import { askClaude } from "./claude.js";
+import { askOpenRouter } from "./openrouter.js";
 import { deleteChat, readChats, readSetting, saveChat, writeSetting } from "./storage.js";
 
 const byId = (id) => document.getElementById(id);
 const ui = Object.fromEntries([
-  "history", "new-chat", "chat-title", "model", "thinking-level", "input-tokens", "output-tokens",
+  "history", "new-chat", "chat-title", "provider", "model", "thinking-level", "input-tokens", "output-tokens",
   "cost-usd", "cost-krw", "rate", "rate-date", "refresh-rate", "usage-note", "conversation",
   "empty", "messages", "compose", "prompt", "send", "status", "sidebar", "menu", "backdrop",
-  "settings", "settings-form", "settings-error", "open-settings",
-  "empty-settings", "close-settings", "reset-settings",
+  "settings", "settings-form", "settings-error", "open-settings", "gemini-settings", "claude-settings",
+  "openrouter-settings", "empty-settings", "close-settings", "reset-settings", "history-hint",
 ].map((id) => [id, byId(id)]));
 
 const { debugToken = "", ...sessionConfig } = readSetting("personal-connection", true) ?? {};
 const config = { backend: "vertex", plan: "blaze", ...readSetting("firebase"), ...sessionConfig };
 if (config.backend === "vertex") config.plan = "blaze";
-const configured = Boolean(config.projectId && config.appId && config.apiKey && debugToken);
+const geminiConfigured = Boolean(config.projectId && config.appId && config.apiKey && debugToken);
+const keyConnections = {
+  claude: {
+    label: "Claude",
+    field: "claudeKey",
+    pattern: /^sk-ant-[A-Za-z0-9_-]+$/,
+    invalidKey: "Claude Console에서 발급한 API 키를 입력해 주세요.",
+    ask: askClaude,
+  },
+  openrouter: {
+    label: "OpenRouter",
+    field: "openrouterKey",
+    pattern: /^sk-or-v1-[A-Za-z0-9_-]+$/,
+    invalidKey: "OpenRouter에서 발급한 API 키를 입력해 주세요.",
+    ask: askOpenRouter,
+  },
+};
+for (const [provider, connection] of Object.entries(keyConnections)) {
+  connection.setting = `${provider}-key`;
+  connection.key = readSetting(connection.setting, true) ?? "";
+}
+const savedModel = readSetting("model");
+const selectedModels = {
+  gemini: models.find(({ id, provider }) => id === savedModel && provider === "gemini")?.id ?? defaultModel,
+  claude: models.find(({ id, provider }) => id === savedModel && provider === "claude")?.id ?? "claude-sonnet-5-5",
+  openrouter: models.find(({ id, provider }) => id === savedModel && provider === "openrouter")?.id ?? "anthropic/claude-haiku-5.5",
+};
 const nf = new Intl.NumberFormat("ko-KR");
 const won = new Intl.NumberFormat("ko-KR", {
   style: "currency", currency: "KRW", maximumFractionDigits: 2,
@@ -140,15 +168,38 @@ function addMessage(role, title, text) {
   return bubble;
 }
 
+function renderModels(modelId) {
+  ui.model.replaceChildren();
+  for (const model of models.filter(({ provider }) => provider === ui.provider.value)) {
+    const option = new Option(model.label, model.id);
+    if (model.provider === "gemini" && config.plan === "spark" && model.paid) {
+      option.disabled = true;
+      option.textContent += " · Blaze 필요";
+    }
+    ui.model.append(option);
+  }
+  const enabled = Array.from(ui.model.options).filter((option) => !option.disabled);
+  ui.model.value = enabled.find((option) => option.value === modelId)?.value ?? enabled[0].value;
+  ui["history-hint"].textContent = ui.provider.value === "openrouter"
+    ? "최근 20턴 · 이전 대화 토큰 수는 브라우저에서 추정"
+    : "최근 20턴 · 이전 대화 최대 10,000토큰";
+  renderConnectionButton();
+}
+
+function renderConnectionButton() {
+  const connection = keyConnections[ui.provider.value];
+  ui["empty-settings"].hidden = connection ? Boolean(connection.key) : geminiConfigured;
+  ui["empty-settings"].textContent = `${connection?.label ?? "Firebase"} 연결 설정`;
+}
+
 function render({ preserveModel = false } = {}) {
   ui["chat-title"].textContent = current.title;
-  const previousModel = current.turns.at(-1)?.model;
-  const lastModel = readSetting("model");
-  const selection = [previousModel, lastModel, defaultModel].find((id) =>
-    Array.from(ui.model.options).some((option) => option.value === id && !option.disabled));
-  if (!preserveModel) ui.model.value = selection;
+  if (!preserveModel) {
+    const modelId = current.turns.at(-1)?.model ?? readSetting("model") ?? defaultModel;
+    ui.provider.value = models.find(({ id }) => id === modelId)?.provider ?? "gemini";
+    renderModels(modelId);
+  }
   ui.empty.hidden = current.turns.length > 0;
-  ui["empty-settings"].hidden = configured;
   ui.messages.replaceChildren();
   for (const turn of current.turns) {
     addMessage("user", "나", turn.prompt);
@@ -183,7 +234,9 @@ async function fetchRate() {
 
 function setBusy(value) {
   busy = value;
-  for (const key of ["model", "thinking-level", "new-chat", "open-settings", "send"]) ui[key].disabled = value;
+  for (const key of ["provider", "model", "thinking-level", "new-chat", "open-settings", "send"]) {
+    ui[key].disabled = value;
+  }
   renderHistory();
 }
 
@@ -233,13 +286,14 @@ async function send(event) {
   event.preventDefault();
   const prompt = ui.prompt.value.trim();
   if (busy || !prompt) return;
-  if (!configured) {
+  const model = models.find((entry) => entry.id === ui.model.value);
+  if (!model || ui.model.selectedOptions[0]?.disabled) return;
+  const connection = keyConnections[model.provider];
+  if (connection ? !connection.key : !geminiConfigured) {
     openSettings();
     return;
   }
 
-  const model = models.find((entry) => entry.id === ui.model.value);
-  if (!model || (config.plan === "spark" && model.paid)) return;
   const thinkingLevel = ui["thinking-level"].value;
   const turn = { id: crypto.randomUUID(), model: model.id, prompt, answer: "", usage: null };
   setBusy(true);
@@ -250,16 +304,19 @@ async function send(event) {
   ui.conversation.scrollTop = ui.conversation.scrollHeight;
   announce("연결과 이전 대화를 확인하는 중…");
   try {
-    const reply = await ask({
-      config, debugToken, model: model.id, thinkingLevel, turns: current.turns, prompt,
+    const request = {
+      model: model.id, thinkingLevel, turns: current.turns, prompt,
       onGenerating: () => announce("답변을 생성하는 중…"),
-    });
+    };
+    const reply = connection
+      ? await connection.ask({ ...request, apiKey: connection.key })
+      : await ask({ ...request, config, debugToken });
     Object.assign(turn, reply);
     const saved = await remember(turn);
     announce(saved ? "" : "브라우저 저장에 실패했어요. 현재 탭에서만 대화가 유지됩니다.", !saved);
   } catch (error) {
     if (!ui.prompt.value) ui.prompt.value = prompt;
-    announce(errorMessage(error), true);
+    announce(connection ? error.message : errorMessage(error), true);
   } finally {
     setBusy(false);
     render({ preserveModel: true });
@@ -269,8 +326,13 @@ async function send(event) {
 const fields = ui["settings-form"].elements;
 const configFields = ["projectId", "appId", "apiKey", "backend", "plan"];
 function updateSettingsForm() {
+  for (const provider of ["gemini", "claude", "openrouter"]) {
+    const fieldset = ui[`${provider}-settings`];
+    fieldset.hidden = fieldset.disabled = fields.provider.value !== provider;
+  }
   if (fields.backend.value === "vertex") fields.plan.value = "blaze";
   fields.plan.disabled = fields.backend.value === "vertex";
+  ui["settings-error"].textContent = "";
 }
 
 function openSettings() {
@@ -278,14 +340,34 @@ function openSettings() {
   for (const name of configFields) {
     fields[name].value = config[name] ?? "";
   }
+  fields.provider.value = ui.provider.value;
   fields.debugToken.value = debugToken;
-  ui["settings-error"].textContent = "";
+  for (const { field, key } of Object.values(keyConnections)) fields[field].value = key;
   updateSettingsForm();
   ui.settings.showModal();
 }
 
 function saveSettings(event) {
   event.preventDefault();
+  const provider = fields.provider.value;
+  const connection = keyConnections[provider];
+  if (connection) {
+    const key = fields[connection.field].value.trim();
+    if (!connection.pattern.test(key)) {
+      ui["settings-error"].textContent = connection.invalidKey;
+      return;
+    }
+    try {
+      writeSetting(connection.setting, key, true);
+    } catch {
+      ui["settings-error"].textContent = `이 탭에 ${connection.label} API 키를 저장할 수 없어요.`;
+      return;
+    }
+    connection.key = key;
+    selectProvider(provider);
+    ui.settings.close();
+    return;
+  }
   const updated = Object.fromEntries(configFields.map((name) => [name, fields[name].value.trim()]));
   const token = fields.debugToken.value.trim();
   if (!updated.projectId || !updated.appId || !updated.apiKey || !token) {
@@ -300,18 +382,23 @@ function saveSettings(event) {
     return;
   }
   try { writeSetting("firebase", updated); } catch { /* The connection is saved for this tab. */ }
+  selectProvider("gemini");
   location.reload();
 }
 
+function rememberModel() {
+  selectedModels[ui.provider.value] = ui.model.value;
+  try { writeSetting("model", ui.model.value); } catch { /* Selection still applies in this tab. */ }
+}
+
+function selectProvider(provider) {
+  ui.provider.value = provider;
+  renderModels(selectedModels[provider]);
+  rememberModel();
+  announce("");
+}
+
 async function start() {
-  for (const model of models) {
-    const option = new Option(model.label, model.id);
-    if (config.plan === "spark" && model.paid) {
-      option.disabled = true;
-      option.textContent += " · Blaze 필요";
-    }
-    ui.model.append(option);
-  }
   ui.prompt.maxLength = maxPromptChars;
   const thinking = ui["thinking-level"];
   const savedThinking = readSetting("thinking-level");
@@ -321,9 +408,8 @@ async function start() {
   thinking.addEventListener("change", () => {
     try { writeSetting("thinking-level", thinking.value); } catch { /* Selection still applies to the next message. */ }
   });
-  ui.model.addEventListener("change", () => {
-    try { writeSetting("model", ui.model.value); } catch { /* Selection still applies to the next message. */ }
-  });
+  ui.provider.addEventListener("change", () => selectProvider(ui.provider.value));
+  ui.model.addEventListener("change", rememberModel);
   ui["new-chat"].addEventListener("click", () => {
     current = newChat();
     ui.prompt.value = "";
@@ -339,9 +425,20 @@ async function start() {
   ui["empty-settings"].addEventListener("click", openSettings);
   ui["close-settings"].addEventListener("click", () => ui.settings.close());
   ui["settings-form"].addEventListener("submit", saveSettings);
+  fields.provider.addEventListener("change", updateSettingsForm);
   fields.backend.addEventListener("change", updateSettingsForm);
   ui["reset-settings"].addEventListener("click", () => {
     try {
+      const connection = keyConnections[fields.provider.value];
+      if (connection) {
+        writeSetting(connection.setting, null, true);
+        connection.key = "";
+        fields[connection.field].value = "";
+        renderConnectionButton();
+        ui["settings-error"].textContent = "";
+        ui.settings.close();
+        return;
+      }
       writeSetting("personal-connection", null, true);
       writeSetting("firebase", null);
     } catch {

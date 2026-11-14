@@ -1,7 +1,15 @@
 export const models = [
-  { id: "gemini-4-argon", label: "Gemini 4 Argon", paid: true },
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", paid: false },
-  { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (Preview)", paid: true },
+  { id: "gemini-4-argon", label: "Gemini 4 Argon", provider: "gemini", paid: true },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", provider: "gemini", paid: false },
+  { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (Preview)", provider: "gemini", paid: true },
+  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", provider: "claude" },
+  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5", provider: "claude" },
+  { id: "claude-opus-5-5", label: "Claude Opus 5.5", provider: "claude" },
+  { id: "claude-fable-5-2", label: "Claude Fable 5.2", provider: "claude" },
+  { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5", provider: "openrouter" },
+  { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5", provider: "openrouter" },
+  { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", provider: "openrouter" },
+  { id: "anthropic/claude-fable-5.2", label: "Claude Fable 5.2", provider: "openrouter" },
 ];
 
 export const defaultModel = "gemini-3.8-flash";

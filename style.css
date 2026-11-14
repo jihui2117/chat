@@ -81,9 +81,9 @@ dialog::backdrop{background:#122e24a0}
 .fields label,fieldset label{display:grid;gap:4px;font-size:.78rem;font-weight:600;min-width:0}
 .fields input,fieldset input:not([type=checkbox]){width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--white)}
 .fields label:nth-child(3),.fields label:nth-child(4){grid-column:1/-1}
-fieldset{margin:12px 0 0;border:1px solid var(--line);border-radius:10px;font-size:.77rem}
-fieldset .check{display:flex;align-items:center;margin-bottom:8px}
-fieldset .dialog-copy{margin:5px 0 0}
+.settings-provider{display:grid;justify-items:start;gap:4px;margin-top:12px;font-size:.78rem;font-weight:600}
+.connection-fields{min-width:0;margin:0;padding:0;border:0}
+.fields .full-field{grid-column:1/-1}
 .dialog-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:14px}
 .outline,.primary{padding:7px 11px;font-size:.83rem}
 .outline{background:transparent;border:1px solid #b9c9b9;border-radius:8px;font-weight:600}
@@ -101,9 +101,9 @@ fieldset .dialog-copy{margin:5px 0 0}
   .usage>div{padding:6px 9px}
   .usage strong{font-size:.85rem}
 }
-@media(max-width:780px){
+@media(max-width:1000px){
   .topbar{flex-wrap:wrap}
-  .model-controls{width:100%;display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:8px}
+  .model-controls{width:100%;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.65fr) minmax(0,1.1fr);gap:8px}
   .model-label{display:grid;gap:3px}
   .model-label select{width:100%;min-width:0}
 }
