@@ -36,7 +36,7 @@
     </aside>
     <main>
       <header class="topbar">
-        <div class="top-title"><button class="icon-button mobile-menu" id="menu" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="이전 채팅 열기"><svg><use href="#i-menu"/></svg></button><h1 id="chat-title">새 채팅</h1></div>
+        <div class="top-title"><button class="icon-button mobile-menu" id="menu" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="이전 채팅 열기"><svg><use href="#i-menu"/></svg></button><h1 id="chat-title">새 채팅</h1><button class="outline instructions-button" id="open-instructions" type="button" aria-haspopup="dialog">채팅 지침</button></div>
         <div class="model-controls">
           <label class="model-label" for="provider">AI 서비스
             <select id="provider">
@@ -75,7 +75,7 @@
       <footer class="compose-area">
         <form id="compose">
           <label class="sr-only" for="prompt">메시지</label>
-          <textarea id="prompt" placeholder="메시지를 입력하세요" rows="2" required></textarea>
+          <textarea id="prompt" placeholder="메시지를 입력하세요" rows="2" enterkeyhint="enter" required></textarea>
           <button class="send" id="send" type="submit" aria-label="메시지 보내기"><svg><use href="#i-up"/></svg></button>
         </form>
         <p id="status" role="status" aria-live="polite"></p>
@@ -118,6 +118,18 @@
       </fieldset>
       <p id="settings-error" role="alert"></p>
       <div class="dialog-actions"><button type="button" class="outline" id="reset-settings">연결 설정 지우기</button><button type="submit" class="primary">저장 및 적용</button></div>
+    </form>
+  </dialog>
+  <dialog id="instructions" aria-labelledby="instructions-title" aria-describedby="instructions-description">
+    <form id="instructions-form" method="dialog">
+      <header class="dialog-head"><h2 id="instructions-title">채팅 지침</h2><button class="icon-button" id="close-instructions" type="button" aria-label="채팅 지침 닫기"><svg><use href="#i-x"/></svg></button></header>
+      <p class="dialog-copy" id="instructions-description">첫 요청과 21번째, 41번째 요청처럼 20턴마다 지침을 보내요. 지침에 사용한 토큰은 그 요청의 입력 비용에 포함돼요.</p>
+      <div class="instruction-fields">
+        <label>공통 지침<textarea name="common" rows="3" enterkeyhint="enter" placeholder="모든 채팅에 적용할 지침"></textarea></label>
+        <label>이 채팅의 지침<textarea name="personal" rows="3" enterkeyhint="enter" placeholder="이 채팅에만 적용할 지침"></textarea></label>
+      </div>
+      <p class="form-error" id="instructions-error" role="alert"></p>
+      <div class="dialog-actions"><button class="primary" type="submit">지침 저장</button></div>
     </form>
   </dialog>
   <script type="module" src="./app.js"></script>

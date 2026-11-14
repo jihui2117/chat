@@ -17,7 +17,7 @@ function nonnegative(value) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-export async function askOpenRouter({ apiKey, model, thinkingLevel, turns, prompt, onGenerating }) {
+export async function askOpenRouter({ apiKey, model, thinkingLevel, turns, prompt, instructions, onGenerating }) {
   // Budget the history locally before sending a paid request. UTF-8 byte length
   // produces a conservative estimate for both Korean and English text.
   const contents = await fitHistory(turns, content("user", prompt), (history) =>
@@ -30,6 +30,7 @@ export async function askOpenRouter({ apiKey, model, thinkingLevel, turns, promp
     })),
     max_tokens: 8192,
   };
+  if (instructions) request.messages.unshift({ role: "system", content: instructions });
   if (thinkingLevel) request.reasoning = { effort: thinkingLevel.toLowerCase() };
 
   onGenerating();
