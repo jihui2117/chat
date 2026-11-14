@@ -162,11 +162,11 @@ function renderUsage() {
   ui["usage-note"].hidden = notes.length === 0;
 }
 
-function addMessage(role, title, text, { copyable = false, turnId } = {}) {
+function addMessage(role, title, text, { copyable = false, turnId, turnNumber }) {
   const article = document.createElement("article");
   article.className = `message ${role}`;
   const label = document.createElement("strong");
-  label.textContent = title;
+  label.textContent = `${title} · ${nf.format(turnNumber)}턴`;
   const bubble = document.createElement("p");
   bubble.className = "bubble";
   bubble.textContent = text;
@@ -202,6 +202,7 @@ function addMessage(role, title, text, { copyable = false, turnId } = {}) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "message-remove";
+    remove.disabled = busy;
     remove.setAttribute("aria-label", description);
     remove.title = description;
     remove.append(icon("trash"));
@@ -251,7 +252,7 @@ function renderConnectionButton() {
   ui["empty-settings"].textContent = `${connection?.label ?? "Firebase"} 연결 설정`;
 }
 
-function render({ preserveModel = false, scrollTop } = {}) {
+function render({ preserveModel = false, scrollTop, pending } = {}) {
   ui["chat-title"].textContent = current.title;
   ui["chat-title"].title = current.title;
   if (!preserveModel) {
@@ -260,12 +261,18 @@ function render({ preserveModel = false, scrollTop } = {}) {
     renderModels(modelId);
   }
   ui.messages.replaceChildren();
-  for (const turn of current.turns) {
-    if (turn.prompt !== null) addMessage("user", "나", turn.prompt, { turnId: turn.id });
+  for (const [index, turn] of current.turns.entries()) {
+    const options = { turnId: turn.id, turnNumber: index + 1 };
+    if (turn.prompt !== null) addMessage("user", "나", turn.prompt, options);
     if (turn.answer !== null) {
       addMessage("model", models.find((model) => model.id === turn.model)?.label ?? turn.model,
-        turn.answer || "모델에서 표시할 답변을 반환하지 않았어요.", { turnId: turn.id, copyable: Boolean(turn.answer?.trim()) });
+        turn.answer || "모델에서 표시할 답변을 반환하지 않았어요.", { ...options, copyable: Boolean(turn.answer?.trim()) });
     }
+  }
+  if (pending) {
+    const options = { turnNumber: current.turns.length + 1 };
+    addMessage("user", "나", pending.prompt, options);
+    addMessage("model", pending.modelLabel, "연결 중…", options);
   }
   ui.empty.hidden = ui.messages.childElementCount > 0;
   renderHistory();
@@ -361,10 +368,6 @@ async function send(event) {
   const turn = { id: crypto.randomUUID(), model: model.id, prompt, answer: "", usage: null };
   setBusy(true);
   ui.prompt.value = "";
-  ui.empty.hidden = true;
-  addMessage("user", "나", prompt);
-  addMessage("model", model.label, "연결 중…");
-  ui.conversation.scrollTop = ui.conversation.scrollHeight;
   announce("연결과 이전 대화를 확인하는 중…");
   try {
     if (storageReady && current.updatedAt) {
@@ -382,6 +385,7 @@ async function send(event) {
         chats = [...chats.filter(({ id }) => id !== current.id), current];
       }
     }
+    render({ preserveModel: true, pending: { prompt, modelLabel: model.label } });
     const request = {
       model: model.id, thinkingLevel, turns: current.turns, prompt,
       instructions: combineInstructions(readSetting("common-instructions"), current.instructions),
