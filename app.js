@@ -14,7 +14,7 @@ const ui = Object.fromEntries([
   "cost-usd", "cost-krw", "rate", "rate-date", "refresh-rate", "usage-note", "conversation",
   "empty", "messages", "compose", "prompt", "send", "status", "sidebar", "menu", "backdrop",
   "settings", "settings-form", "settings-error", "open-settings", "gemini-settings", "claude-settings",
-  "openrouter-settings", "empty-settings", "close-settings", "reset-settings", "history-hint",
+  "openrouter-settings", "empty-settings", "close-settings", "reset-settings",
   "instructions", "instructions-form", "instructions-error", "open-instructions", "close-instructions",
   "copy-status",
   "backup", "open-backup", "close-backup", "export-backup", "choose-backup", "backup-file", "backup-status",
@@ -242,9 +242,6 @@ function renderModels(modelId) {
   }
   const enabled = Array.from(ui.model.options).filter((option) => !option.disabled);
   ui.model.value = enabled.find((option) => option.value === modelId)?.value ?? enabled[0].value;
-  ui["history-hint"].textContent = ui.provider.value === "openrouter"
-    ? "최근 20턴 · 이전 대화 토큰 수는 브라우저에서 추정"
-    : "최근 20턴 · 이전 대화 최대 10,000토큰";
   renderConnectionButton();
 }
 
@@ -321,7 +318,6 @@ function errorMessage(error) {
     }
     return `${headline} Firebase 콘솔의 이 웹 앱에 등록된 디버그 토큰과 연결 설정의 웹 앱 ID를 확인해 주세요.`;
   }
-  if (details === "token-count") return "이전 대화의 토큰 수를 확인할 수 없었어요. 잠시 후 다시 시도해 주세요.";
   if (/429|quota|resource.exhausted/i.test(details)) return "Firebase 사용량 한도에 도달했어요. 잠시 후 다시 시도해 주세요.";
   if (/404|not.found/i.test(details)) return "이 Firebase 프로젝트에서 선택한 모델을 찾을 수 없어요.";
   if (/403|denied|401|billing/i.test(details)) return "모델 호출 권한이 없어요. Firebase AI Logic, 모델 이용 권한, 요금제를 확인해 주세요.";

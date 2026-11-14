@@ -1,7 +1,6 @@
-import { content, fitHistory } from "./chat-core.js";
+import { content, historyContents } from "./chat-core.js";
 
 const completionsUrl = "https://openrouter.ai/api/v1/chat/completions";
-const encoder = new TextEncoder();
 const requestErrors = {
   400: "OpenRouter가 요청을 거절했어요. 입력 길이와 모델 설정을 확인해 주세요.",
   401: "OpenRouter API 키가 유효한지 확인해 주세요.",
@@ -18,10 +17,7 @@ function nonnegative(value) {
 }
 
 export async function askOpenRouter({ apiKey, model, thinkingLevel, turns, prompt, instructions, onGenerating }) {
-  // Budget the history locally before sending a paid request. UTF-8 byte length
-  // produces a conservative estimate for both Korean and English text.
-  const contents = await fitHistory(turns, content("user", prompt), (history) =>
-    history.reduce((size, { parts }) => size + 8 + encoder.encode(parts[0].text).length, 0));
+  const contents = historyContents(turns, content("user", prompt));
   const request = {
     model,
     messages: contents.map(({ role, parts }) => ({

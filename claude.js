@@ -1,4 +1,4 @@
-import { content, fitHistory } from "./chat-core.js";
+import { content, historyContents } from "./chat-core.js";
 
 const messagesUrl = "https://api.anthropic.com/v1/messages";
 const prices = {
@@ -8,10 +8,10 @@ const prices = {
   "claude-fable-5-2": { input: 8, output: 40, cacheRead: 0.20 },
 };
 
-async function post(apiKey, path, body, timeout) {
+async function post(apiKey, body) {
   let response;
   try {
-    response = await fetch(messagesUrl + path, {
+    response = await fetch(messagesUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -22,7 +22,7 @@ async function post(apiKey, path, body, timeout) {
       body: JSON.stringify(body),
       credentials: "omit",
       redirect: "error",
-      signal: AbortSignal.timeout(timeout),
+      signal: AbortSignal.timeout(300_000),
     });
   } catch (cause) {
     throw new Error(cause.name === "TimeoutError"
@@ -78,11 +78,7 @@ function measureUsage(usage, model) {
 }
 
 export async function askClaude({ apiKey, model, thinkingLevel, turns, prompt, instructions, onGenerating }) {
-  const contents = await fitHistory(turns, content("user", prompt), async (history) => {
-    const count = await post(apiKey, "/count_tokens", { model, messages: messagesFrom(history) }, 30_000);
-    if (!Number.isSafeInteger(count.input_tokens)) throw new Error("Claude 입력 토큰 수를 확인할 수 없었어요.");
-    return count.input_tokens;
-  });
+  const contents = historyContents(turns, content("user", prompt));
 
   onGenerating();
   const request = { model, messages: messagesFrom(contents), max_tokens: 8192 };
@@ -91,7 +87,7 @@ export async function askClaude({ apiKey, model, thinkingLevel, turns, prompt, i
     request.thinking = { type: "adaptive" };
     request.output_config = { effort: thinkingLevel.toLowerCase() };
   }
-  const response = await post(apiKey, "", request, 300_000);
+  const response = await post(apiKey, request);
   const answer = response.content
     .filter((part) => part.type === "text")
     .map((part) => part.text)

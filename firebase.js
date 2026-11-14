@@ -1,4 +1,4 @@
-import { content, fitHistory, measureUsage } from "./chat-core.js";
+import { content, historyContents, measureUsage } from "./chat-core.js";
 
 const cdn = "https://www.gstatic.com/firebasejs/12.19.0";
 let service;
@@ -85,19 +85,15 @@ export async function ask({ config, debugToken, model, thinkingLevel, turns, pro
     generationConfig.thinkingConfig = { thinkingLevel: ThinkingLevel[thinkingLevel] };
   }
   const modelParams = { model, generationConfig };
+  if (instructions) modelParams.systemInstruction = instructions;
   const generator = getModel(ai, modelParams);
-  const contents = await fitHistory(turns, content("user", prompt), async (messages) => {
-    const count = await generator.countTokens({ contents: messages });
-    if (!Number.isFinite(count.totalTokens)) throw new Error("token-count");
-    return count.totalTokens;
-  });
+  const contents = historyContents(turns, content("user", prompt));
 
   onGenerating();
   const requestDate = new Date().toISOString().slice(0, 10);
   // Use the full API response so token accounting doesn't depend on the SDK's
   // aggregation of streaming chunks.
-  const requestModel = instructions ? getModel(ai, { ...modelParams, systemInstruction: instructions }) : generator;
-  const { response } = await requestModel.generateContent({ contents });
+  const { response } = await generator.generateContent({ contents });
   const hasParts = response.candidates?.[0]?.content?.parts?.length;
   const answer = hasParts ? response.text() : "";
   const metadata = response.usageMetadata;
