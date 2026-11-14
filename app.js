@@ -12,6 +12,7 @@ const ui = Object.fromEntries([
   "settings", "settings-form", "settings-error", "open-settings", "gemini-settings", "claude-settings",
   "openrouter-settings", "empty-settings", "close-settings", "reset-settings", "history-hint",
   "instructions", "instructions-form", "instructions-error", "open-instructions", "close-instructions",
+  "copy-status",
 ].map((id) => [id, byId(id)]));
 
 const { debugToken = "", ...sessionConfig } = readSetting("personal-connection", true) ?? {};
@@ -156,7 +157,7 @@ function renderUsage() {
   ui["usage-note"].hidden = notes.length === 0;
 }
 
-function addMessage(role, title, text) {
+function addMessage(role, title, text, { copyable = false } = {}) {
   const article = document.createElement("article");
   article.className = `message ${role}`;
   const label = document.createElement("strong");
@@ -165,8 +166,30 @@ function addMessage(role, title, text) {
   bubble.className = "bubble";
   bubble.textContent = text;
   article.append(label, bubble);
+  if (copyable) {
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "message-copy";
+    const caption = document.createElement("span");
+    caption.textContent = "답변 복사";
+    copy.append(icon("copy"), caption);
+    let reset;
+    copy.addEventListener("click", async () => {
+      clearTimeout(reset);
+      ui["copy-status"].textContent = "";
+      try {
+        await navigator.clipboard.writeText(text);
+        caption.textContent = "복사됨";
+        ui["copy-status"].textContent = "답변을 클립보드에 복사했어요.";
+        reset = setTimeout(() => { caption.textContent = "답변 복사"; }, 1800);
+      } catch {
+        caption.textContent = "복사 실패 · 다시 시도";
+        ui["copy-status"].textContent = "답변을 복사하지 못했어요. 다시 시도하거나 답변 텍스트를 직접 복사해 주세요.";
+      }
+    });
+    article.append(copy);
+  }
   ui.messages.append(article);
-  return bubble;
 }
 
 function renderModels(modelId) {
@@ -195,6 +218,7 @@ function renderConnectionButton() {
 
 function render({ preserveModel = false } = {}) {
   ui["chat-title"].textContent = current.title;
+  ui["chat-title"].title = current.title;
   if (!preserveModel) {
     const modelId = current.turns.at(-1)?.model ?? readSetting("model") ?? defaultModel;
     ui.provider.value = models.find(({ id }) => id === modelId)?.provider ?? "gemini";
@@ -205,7 +229,7 @@ function render({ preserveModel = false } = {}) {
   for (const turn of current.turns) {
     addMessage("user", "나", turn.prompt);
     addMessage("model", models.find((model) => model.id === turn.model)?.label ?? turn.model,
-      turn.answer || "모델에서 표시할 답변을 반환하지 않았어요.");
+      turn.answer || "모델에서 표시할 답변을 반환하지 않았어요.", { copyable: Boolean(turn.answer?.trim()) });
   }
   renderHistory();
   renderUsage();
