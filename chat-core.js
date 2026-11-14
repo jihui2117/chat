@@ -16,6 +16,12 @@ export const defaultModel = "gemini-3.8-flash";
 export const maxPromptChars = 40_000;
 const maxTurns = 20;
 const historyBudget = 10_000;
+
+export function instructionsForTurn(completedTurns, common, personal) {
+  if (completedTurns % maxTurns !== 0) return "";
+  return [common, personal].map((text) => (text ?? "").trim()).filter(Boolean).join("\n\n");
+}
+
 const modelRates = {
   "gemini-4-argon": {
     before: "2026-12-01",

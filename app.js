@@ -1,4 +1,4 @@
-import { defaultModel, maxPromptChars, models, totals } from "./chat-core.js";
+import { defaultModel, instructionsForTurn, maxPromptChars, models, totals } from "./chat-core.js";
 import { ask } from "./firebase.js";
 import { askClaude } from "./claude.js";
 import { askOpenRouter } from "./openrouter.js";
@@ -11,6 +11,7 @@ const ui = Object.fromEntries([
   "empty", "messages", "compose", "prompt", "send", "status", "sidebar", "menu", "backdrop",
   "settings", "settings-form", "settings-error", "open-settings", "gemini-settings", "claude-settings",
   "openrouter-settings", "empty-settings", "close-settings", "reset-settings", "history-hint",
+  "instructions", "instructions-form", "instructions-error", "open-instructions", "close-instructions",
 ].map((id) => [id, byId(id)]));
 
 const { debugToken = "", ...sessionConfig } = readSetting("personal-connection", true) ?? {};
@@ -59,7 +60,7 @@ let fx = readSetting("exchange");
 let fxStatus = "";
 
 function newChat() {
-  return { id: crypto.randomUUID(), title: "새 채팅", updatedAt: 0, turns: [] };
+  return { id: crypto.randomUUID(), title: "새 채팅", updatedAt: 0, instructions: "", turns: [] };
 }
 
 function announce(text, error = false) {
@@ -234,7 +235,7 @@ async function fetchRate() {
 
 function setBusy(value) {
   busy = value;
-  for (const key of ["provider", "model", "thinking-level", "new-chat", "open-settings", "send"]) {
+  for (const key of ["provider", "model", "thinking-level", "new-chat", "open-settings", "open-instructions", "send"]) {
     ui[key].disabled = value;
   }
   renderHistory();
@@ -306,6 +307,7 @@ async function send(event) {
   try {
     const request = {
       model: model.id, thinkingLevel, turns: current.turns, prompt,
+      instructions: instructionsForTurn(current.turns.length, readSetting("common-instructions"), current.instructions),
       onGenerating: () => announce("답변을 생성하는 중…"),
     };
     const reply = connection
@@ -321,6 +323,53 @@ async function send(event) {
     setBusy(false);
     render({ preserveModel: true });
   }
+}
+
+const instructionFields = ui["instructions-form"].elements;
+
+function openInstructions() {
+  if (busy) return;
+  instructionFields.common.value = readSetting("common-instructions") ?? "";
+  instructionFields.personal.value = current.instructions ?? "";
+  ui["instructions-error"].textContent = "";
+  ui.instructions.showModal();
+}
+
+async function saveInstructions(event) {
+  event.preventDefault();
+  if (busy) return;
+  const common = instructionFields.common.value.trim();
+  const personal = instructionFields.personal.value.trim();
+  const commonChanged = common !== (readSetting("common-instructions") ?? "");
+  if (commonChanged) {
+    try {
+      writeSetting("common-instructions", common || null);
+    } catch {
+      ui["instructions-error"].textContent = "공통 지침을 이 브라우저에 저장할 수 없어요.";
+      return;
+    }
+  }
+  if (personal !== (current.instructions ?? "")) {
+    const submit = event.submitter;
+    const updatedAt = current.updatedAt || Date.now();
+    const updated = { ...current, instructions: personal, updatedAt };
+    setBusy(true);
+    if (submit) submit.disabled = true;
+    try {
+      current = await saveChat(updated, { saveInstructions: true });
+      chats = [...chats.filter((entry) => entry.id !== current.id), current];
+      render({ preserveModel: true });
+    } catch {
+      ui["instructions-error"].textContent = commonChanged
+        ? "공통 지침은 저장됐어요. 이 채팅의 지침을 저장할 수 없으니 다시 시도해 주세요."
+        : "이 채팅의 지침을 저장할 수 없어요. 다시 시도해 주세요.";
+      return;
+    } finally {
+      if (submit) submit.disabled = false;
+      setBusy(false);
+    }
+  }
+  ui.instructions.close();
 }
 
 const fields = ui["settings-form"].elements;
@@ -421,6 +470,9 @@ async function start() {
   ui.menu.addEventListener("click", () => setSidebar(!ui.sidebar.classList.contains("open")));
   ui.backdrop.addEventListener("click", () => { setSidebar(false); ui.menu.focus(); });
   ui["refresh-rate"].addEventListener("click", fetchRate);
+  ui["open-instructions"].addEventListener("click", openInstructions);
+  ui["close-instructions"].addEventListener("click", () => ui.instructions.close());
+  ui["instructions-form"].addEventListener("submit", saveInstructions);
   ui["open-settings"].addEventListener("click", openSettings);
   ui["empty-settings"].addEventListener("click", openSettings);
   ui["close-settings"].addEventListener("click", () => ui.settings.close());
@@ -448,8 +500,9 @@ async function start() {
     location.reload();
   });
   ui.compose.addEventListener("submit", send);
+  const desktopInput = window.matchMedia("(min-width: 691px) and (hover: hover) and (pointer: fine)");
   ui.prompt.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
+    if (desktopInput.matches && event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
       event.preventDefault();
       ui.compose.requestSubmit();
     }

@@ -77,7 +77,7 @@ function measureUsage(usage, model) {
   return { input, output, usd };
 }
 
-export async function askClaude({ apiKey, model, thinkingLevel, turns, prompt, onGenerating }) {
+export async function askClaude({ apiKey, model, thinkingLevel, turns, prompt, instructions, onGenerating }) {
   const contents = await fitHistory(turns, content("user", prompt), async (history) => {
     const count = await post(apiKey, "/count_tokens", { model, messages: messagesFrom(history) }, 30_000);
     if (!Number.isSafeInteger(count.input_tokens)) throw new Error("Claude 입력 토큰 수를 확인할 수 없었어요.");
@@ -86,6 +86,7 @@ export async function askClaude({ apiKey, model, thinkingLevel, turns, prompt, o
 
   onGenerating();
   const request = { model, messages: messagesFrom(contents), max_tokens: 8192 };
+  if (instructions) request.system = instructions;
   if (thinkingLevel) {
     request.thinking = { type: "adaptive" };
     request.output_config = { effort: thinkingLevel.toLowerCase() };

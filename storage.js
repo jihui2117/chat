@@ -26,7 +26,7 @@ export const readChats = async () => {
   return chats.filter((chat) => !chat.deleted);
 };
 
-export async function saveChat(chat) {
+export async function saveChat(chat, { saveInstructions = false } = {}) {
   let merged;
   await transaction("readwrite", (store) => {
     const request = store.get(chat.id);
@@ -37,7 +37,8 @@ export async function saveChat(chat) {
       const existingIds = new Set(storedTurns.map((turn) => turn.id));
       merged = {
         ...chat,
-        title: stored?.title ?? chat.title,
+        title: storedTurns.length ? stored.title : chat.title,
+        instructions: saveInstructions ? chat.instructions : stored?.instructions ?? chat.instructions ?? "",
         turns: [...storedTurns, ...chat.turns.filter((turn) => !existingIds.has(turn.id))],
       };
       store.put(merged);

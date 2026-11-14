@@ -71,7 +71,7 @@ async function exchangeDebugToken({ projectId, appId, apiKey }, debugToken) {
   return { token, expireTimeMillis };
 }
 
-export async function ask({ config, debugToken, model, thinkingLevel, turns, prompt, onGenerating }) {
+export async function ask({ config, debugToken, model, thinkingLevel, turns, prompt, instructions, onGenerating }) {
   const { ai, getModel, ThinkingLevel, appCheck, getToken } = await getService(config, debugToken);
   // Give App Check its own error before sending a request to AI Logic.
   try {
@@ -84,7 +84,8 @@ export async function ask({ config, debugToken, model, thinkingLevel, turns, pro
   if (thinkingLevel) {
     generationConfig.thinkingConfig = { thinkingLevel: ThinkingLevel[thinkingLevel] };
   }
-  const generator = getModel(ai, { model, generationConfig });
+  const modelParams = { model, generationConfig };
+  const generator = getModel(ai, modelParams);
   const contents = await fitHistory(turns, content("user", prompt), async (messages) => {
     const count = await generator.countTokens({ contents: messages });
     if (!Number.isFinite(count.totalTokens)) throw new Error("token-count");
@@ -95,7 +96,8 @@ export async function ask({ config, debugToken, model, thinkingLevel, turns, pro
   const requestDate = new Date().toISOString().slice(0, 10);
   // Use the full API response so token accounting doesn't depend on the SDK's
   // aggregation of streaming chunks.
-  const { response } = await generator.generateContent({ contents });
+  const requestModel = instructions ? getModel(ai, { ...modelParams, systemInstruction: instructions }) : generator;
+  const { response } = await requestModel.generateContent({ contents });
   const hasParts = response.candidates?.[0]?.content?.parts?.length;
   const answer = hasParts ? response.text() : "";
   const metadata = response.usageMetadata;
