@@ -19,6 +19,7 @@
     <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-.5 5.5M20 4v6h-6"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
   </svg>
   <div class="shell">
     <button class="backdrop" id="backdrop" type="button" aria-label="사이드바 닫기" hidden></button>
@@ -71,6 +72,7 @@
           <button class="outline" type="button" id="empty-settings">Firebase 연결 설정</button>
         </section>
         <div class="messages" id="messages" aria-label="대화"></div>
+        <span class="sr-only" id="copy-status" role="status"></span>
       </div>
       <footer class="compose-area">
         <form id="compose">
