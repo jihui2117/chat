@@ -63,9 +63,12 @@ select{border:1px solid var(--line);background:var(--white);border-radius:8px;pa
 .bubble{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:11px 14px;border-radius:12px;max-width:min(100%,720px);line-height:1.6;font-size:.94rem}
 .user .bubble{background:#e7efd9}
 .model .bubble{background:var(--white);border:1px solid var(--line)}
-.message-copy{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:36px;padding:5px 8px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:.76rem;text-align:left}
+.message-actions{display:flex;align-items:center;gap:2px}
+.message-copy,.message-remove{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-height:36px;padding:5px 8px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:.76rem;text-align:left}
 .message-copy:hover{background:#e1eae0}
-.message-copy svg{width:15px;height:15px}
+.message-remove{justify-content:center;min-width:36px}
+.message-remove:hover{background:#f4e5e0;color:var(--danger)}
+.message-copy svg,.message-remove svg{width:15px;height:15px}
 .compose-area{width:min(calc(100% - 56px),850px);margin:0 auto;padding:8px 0 11px}
 #compose{border:1px solid #cbd7cb;border-radius:15px;background:var(--white);display:flex;align-items:end;padding:8px;gap:8px}
 #compose:focus-within{border-color:#55846e}

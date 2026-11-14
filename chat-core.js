@@ -17,8 +17,7 @@ export const maxPromptChars = 40_000;
 const maxTurns = 20;
 const historyBudget = 10_000;
 
-export function instructionsForTurn(completedTurns, common, personal) {
-  if (completedTurns % maxTurns !== 0) return "";
+export function combineInstructions(common, personal) {
   return [common, personal].map((text) => (text ?? "").trim()).filter(Boolean).join("\n\n");
 }
 
@@ -79,26 +78,38 @@ export function content(role, text) {
 }
 
 export async function fitHistory(turns, current, countTokens) {
-  const recent = turns.filter((turn) => turn.answer).slice(-maxTurns);
+  const recent = turns.filter(({ prompt, answer }) => answer || (answer === null && prompt)).slice(-maxTurns);
   if (!recent.length) return [current];
   const base = await countTokens([current]);
   let low = 0;
   let high = recent.length;
 
-  // Each request includes a suffix of complete turns and the new message.
   // Find the largest suffix that fits while always retaining the new message.
   while (low < high) {
     const count = Math.ceil((low + high) / 2);
-    const candidate = [...historyContents(recent.slice(-count)), current];
+    const candidate = historyContents(recent.slice(-count), current);
     if ((await countTokens(candidate)) - base <= historyBudget) {
       low = count;
     } else {
       high = count - 1;
     }
   }
-  return low ? [...historyContents(recent.slice(-low)), current] : [current];
+  return low ? historyContents(recent.slice(-low), current) : [current];
 }
 
-function historyContents(turns) {
-  return turns.flatMap(({ prompt, answer }) => [content("user", prompt), content("model", answer)]);
+function historyContents(turns, current) {
+  const messages = [];
+  const append = (role, text) => {
+    if (!text) return;
+    const previous = messages.at(-1);
+    if (previous?.role === role) previous.parts[0].text += "\n\n" + text;
+    else messages.push(content(role, text));
+  };
+  if (!turns[0].prompt) append("user", "[이전 질문이 삭제됐습니다.]");
+  for (const { prompt, answer } of turns) {
+    append("user", prompt);
+    append("model", answer);
+  }
+  append(current.role, current.parts[0].text);
+  return messages;
 }

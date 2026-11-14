@@ -26,7 +26,46 @@ export const readChats = async () => {
   return chats.filter((chat) => !chat.deleted);
 };
 
+export const readChat = (id) => transaction("readonly", (store) => store.get(id));
+
+export function mergeTurns(stored, incoming) {
+  const turns = new Map(stored.map((turn) => [turn.id, turn]));
+  for (const turn of incoming) {
+    const existing = turns.get(turn.id);
+    if (!existing) {
+      turns.set(turn.id, turn);
+    } else if ((turn.prompt === null && existing.prompt !== null) ||
+               (turn.answer === null && existing.answer !== null)) {
+      turns.set(turn.id, {
+        ...existing,
+        prompt: turn.prompt === null ? null : existing.prompt,
+        answer: turn.answer === null ? null : existing.answer,
+      });
+    }
+  }
+  return [...turns.values()];
+}
+
+export function chatTitle(turns) {
+  return turns.find(({ prompt }) => prompt)?.prompt.replace(/\s+/g, " ").slice(0, 48) ?? "새 채팅";
+}
+
+export function withoutMessage(chat, turnId, field) {
+  const turn = chat.turns.find(({ id }) => id === turnId);
+  if (!turn || turn[field] === null) return chat;
+  const turns = chat.turns.map((entry) => entry.id === turnId ? { ...entry, [field]: null } : entry);
+  return { ...chat, turns, title: field === "prompt" ? chatTitle(turns) : chat.title };
+}
+
 export async function saveChat(chat, { saveInstructions = false } = {}) {
+  return updateChat(chat, (merged) => merged, saveInstructions);
+}
+
+export async function deleteMessage(chat, turnId, field) {
+  return updateChat(chat, (merged) => withoutMessage(merged, turnId, field));
+}
+
+async function updateChat(chat, change, saveInstructions = false) {
   let merged;
   await transaction("readwrite", (store) => {
     const request = store.get(chat.id);
@@ -34,13 +73,17 @@ export async function saveChat(chat, { saveInstructions = false } = {}) {
       const stored = request.result;
       if (stored?.deleted) return;
       const storedTurns = stored?.turns ?? [];
-      const existingIds = new Set(storedTurns.map((turn) => turn.id));
-      merged = {
+      const turns = mergeTurns(storedTurns, chat.turns);
+      const removedPrompt = storedTurns.some(({ prompt }, i) => prompt && turns[i].prompt === null);
+      const title = !stored ? chat.title
+        : removedPrompt || !storedTurns.some(({ prompt }) => prompt) ? chatTitle(turns) : stored.title;
+      merged = change({
         ...chat,
-        title: storedTurns.length ? stored.title : chat.title,
+        title,
+        updatedAt: Math.max(stored?.updatedAt ?? 0, chat.updatedAt),
         instructions: saveInstructions ? chat.instructions : stored?.instructions ?? chat.instructions ?? "",
-        turns: [...storedTurns, ...chat.turns.filter((turn) => !existingIds.has(turn.id))],
-      };
+        turns,
+      });
       store.put(merged);
     };
     return request;
@@ -68,18 +111,20 @@ export async function importChats(chats) {
           counts.skipped++;
           continue;
         }
-        const ids = new Set(stored.turns.map(({ id }) => id));
-        const newTurns = chat.turns.filter(({ id }) => !ids.has(id));
-        if (!newTurns.length && (stored.instructions != null || !chat.instructions)) {
+        const turns = mergeTurns(stored.turns, chat.turns);
+        const changed = turns.length !== stored.turns.length || stored.turns.some((turn, i) => turn !== turns[i]);
+        if (!changed && (stored.instructions != null || !chat.instructions)) {
           counts.skipped++;
           continue;
         }
+        const hadPrompt = stored.turns.some(({ prompt }) => prompt);
+        const removedPrompt = stored.turns.some(({ prompt }, i) => prompt && turns[i].prompt === null);
         const merged = {
           ...stored,
-          title: stored.turns.length ? stored.title : chat.title,
+          title: hadPrompt && !removedPrompt ? stored.title : chatTitle(turns),
           updatedAt: Math.max(stored.updatedAt, chat.updatedAt),
           instructions: stored.instructions ?? chat.instructions,
-          turns: [...stored.turns, ...newTurns],
+          turns,
         };
         store.put(merged);
         storedChats.set(chat.id, merged);

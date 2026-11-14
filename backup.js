@@ -1,5 +1,5 @@
 const format = "argon-chat-backup";
-const version = 1;
+const version = 2;
 
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -28,8 +28,8 @@ function sanitizeUsage(usage) {
 
 function sanitizeTurn(turn) {
   requireValid(record(turn) && typeof turn.id === "string" && turn.id &&
-    typeof turn.model === "string" && turn.model && typeof turn.prompt === "string" &&
-    typeof turn.answer === "string");
+    typeof turn.model === "string" && turn.model && (turn.prompt === null || typeof turn.prompt === "string") &&
+    (turn.answer === null || typeof turn.answer === "string"));
   return { id: turn.id, model: turn.model, prompt: turn.prompt, answer: turn.answer, usage: sanitizeUsage(turn.usage) };
 }
 
@@ -48,7 +48,7 @@ export function makeBackup(chats, commonInstructions) {
 
 export function readBackup(text) {
   const backup = JSON.parse(text);
-  requireValid(record(backup) && backup.format === format && backup.version === version &&
+  requireValid(record(backup) && backup.format === format && (backup.version === 1 || backup.version === version) &&
     typeof backup.commonInstructions === "string" && Array.isArray(backup.chats));
   const chats = backup.chats.map(sanitizeChat);
   requireValid(new Set(chats.map(({ id }) => id)).size === chats.length);

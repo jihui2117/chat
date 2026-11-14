@@ -1,9 +1,12 @@
-import { defaultModel, instructionsForTurn, maxPromptChars, models, totals } from "./chat-core.js";
+import { combineInstructions, defaultModel, maxPromptChars, models, totals } from "./chat-core.js";
 import { ask } from "./firebase.js";
 import { askClaude } from "./claude.js";
 import { askOpenRouter } from "./openrouter.js";
 import { makeBackup, readBackup } from "./backup.js";
-import { deleteChat, importChats, readChats, readSetting, saveChat, writeSetting } from "./storage.js";
+import {
+  chatTitle, deleteChat, deleteMessage, importChats, mergeTurns, readChat, readChats,
+  readSetting, saveChat, withoutMessage, writeSetting,
+} from "./storage.js";
 
 const byId = (id) => document.getElementById(id);
 const ui = Object.fromEntries([
@@ -159,7 +162,7 @@ function renderUsage() {
   ui["usage-note"].hidden = notes.length === 0;
 }
 
-function addMessage(role, title, text, { copyable = false } = {}) {
+function addMessage(role, title, text, { copyable = false, turnId } = {}) {
   const article = document.createElement("article");
   article.className = `message ${role}`;
   const label = document.createElement("strong");
@@ -168,6 +171,8 @@ function addMessage(role, title, text, { copyable = false } = {}) {
   bubble.className = "bubble";
   bubble.textContent = text;
   article.append(label, bubble);
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
   if (copyable) {
     const copy = document.createElement("button");
     copy.type = "button";
@@ -189,9 +194,40 @@ function addMessage(role, title, text, { copyable = false } = {}) {
         ui["copy-status"].textContent = "답변을 복사하지 못했어요. 다시 시도하거나 답변 텍스트를 직접 복사해 주세요.";
       }
     });
-    article.append(copy);
+    actions.append(copy);
   }
+  if (turnId) {
+    const field = role === "user" ? "prompt" : "answer";
+    const description = role === "user" ? "내 메시지 삭제" : "AI 답변 삭제";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "message-remove";
+    remove.setAttribute("aria-label", description);
+    remove.title = description;
+    remove.append(icon("trash"));
+    remove.addEventListener("click", () => void removeMessage(turnId, field));
+    actions.append(remove);
+  }
+  if (actions.childElementCount) article.append(actions);
   ui.messages.append(article);
+}
+
+async function removeMessage(turnId, field) {
+  if (busy || !window.confirm("이 메시지를 채팅과 이후 대화 문맥에서 삭제할까요?")) return;
+  const scrollTop = ui.conversation.scrollTop;
+  setBusy(true);
+  try {
+    current = storageReady
+      ? await deleteMessage(current, turnId, field)
+      : withoutMessage(current, turnId, field);
+    chats = [...chats.filter((chat) => chat.id !== current.id), current];
+    render({ preserveModel: true, scrollTop });
+    announce("메시지를 삭제했어요.");
+  } catch {
+    announce("메시지를 삭제하지 못했어요. 다시 시도해 주세요.", true);
+  } finally {
+    setBusy(false);
+  }
 }
 
 function renderModels(modelId) {
@@ -218,7 +254,7 @@ function renderConnectionButton() {
   ui["empty-settings"].textContent = `${connection?.label ?? "Firebase"} 연결 설정`;
 }
 
-function render({ preserveModel = false } = {}) {
+function render({ preserveModel = false, scrollTop } = {}) {
   ui["chat-title"].textContent = current.title;
   ui["chat-title"].title = current.title;
   if (!preserveModel) {
@@ -226,16 +262,18 @@ function render({ preserveModel = false } = {}) {
     ui.provider.value = models.find(({ id }) => id === modelId)?.provider ?? "gemini";
     renderModels(modelId);
   }
-  ui.empty.hidden = current.turns.length > 0;
   ui.messages.replaceChildren();
   for (const turn of current.turns) {
-    addMessage("user", "나", turn.prompt);
-    addMessage("model", models.find((model) => model.id === turn.model)?.label ?? turn.model,
-      turn.answer || "모델에서 표시할 답변을 반환하지 않았어요.", { copyable: Boolean(turn.answer?.trim()) });
+    if (turn.prompt !== null) addMessage("user", "나", turn.prompt, { turnId: turn.id });
+    if (turn.answer !== null) {
+      addMessage("model", models.find((model) => model.id === turn.model)?.label ?? turn.model,
+        turn.answer || "모델에서 표시할 답변을 반환하지 않았어요.", { turnId: turn.id, copyable: Boolean(turn.answer?.trim()) });
+    }
   }
+  ui.empty.hidden = ui.messages.childElementCount > 0;
   renderHistory();
   renderUsage();
-  ui.conversation.scrollTop = ui.conversation.scrollHeight;
+  ui.conversation.scrollTop = scrollTop ?? ui.conversation.scrollHeight;
 }
 
 async function fetchRate() {
@@ -264,6 +302,7 @@ function setBusy(value) {
   for (const key of ["provider", "model", "thinking-level", "new-chat", "open-settings", "open-instructions", "open-backup", "send"]) {
     ui[key].disabled = value;
   }
+  for (const button of ui.messages.querySelectorAll(".message-remove")) button.disabled = value;
   renderHistory();
 }
 
@@ -291,11 +330,12 @@ function errorMessage(error) {
 }
 
 async function remember(turn) {
+  const turns = [...current.turns, turn];
   const updated = {
     ...current,
-    title: current.turns.length ? current.title : turn.prompt.replace(/\s+/g, " ").slice(0, 48),
+    title: current.turns.some(({ prompt }) => prompt) ? current.title : chatTitle(turns),
     updatedAt: Date.now(),
-    turns: [...current.turns, turn],
+    turns,
   };
   let saved = false;
   try {
@@ -331,9 +371,24 @@ async function send(event) {
   ui.conversation.scrollTop = ui.conversation.scrollHeight;
   announce("연결과 이전 대화를 확인하는 중…");
   try {
+    if (storageReady && current.updatedAt) {
+      const stored = await readChat(current.id);
+      if (stored?.deleted) {
+        chats = chats.filter(({ id }) => id !== current.id);
+        current = newChat();
+        ui.prompt.value = prompt;
+        announce("다른 탭에서 이 채팅을 삭제했어요. 새 채팅으로 전환했어요.", true);
+        return;
+      }
+      if (stored) {
+        const turns = mergeTurns(stored.turns, current.turns);
+        current = { ...stored, turns };
+        chats = [...chats.filter(({ id }) => id !== current.id), current];
+      }
+    }
     const request = {
       model: model.id, thinkingLevel, turns: current.turns, prompt,
-      instructions: instructionsForTurn(current.turns.length, readSetting("common-instructions"), current.instructions),
+      instructions: combineInstructions(readSetting("common-instructions"), current.instructions),
       onGenerating: () => announce("답변을 생성하는 중…"),
     };
     const reply = connection

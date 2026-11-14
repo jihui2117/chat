@@ -127,7 +127,7 @@
   <dialog id="instructions" aria-labelledby="instructions-title" aria-describedby="instructions-description">
     <form id="instructions-form" method="dialog">
       <header class="dialog-head"><h2 id="instructions-title">채팅 지침</h2><button class="icon-button" id="close-instructions" type="button" aria-label="채팅 지침 닫기"><svg><use href="#i-x"/></svg></button></header>
-      <p class="dialog-copy" id="instructions-description">첫 요청과 21번째, 41번째 요청처럼 20턴마다 지침을 보내요. 지침에 사용한 토큰은 그 요청의 입력 비용에 포함돼요.</p>
+      <p class="dialog-copy" id="instructions-description">매 요청에 공통 지침과 이 채팅의 지침을 함께 보내요. 이전 대화는 최근 최대 20턴까지 포함되고, 지침은 그 범위와 별도로 적용돼요.</p>
       <div class="instruction-fields">
         <label>공통 지침<textarea name="common" rows="3" enterkeyhint="enter" placeholder="모든 채팅에 적용할 지침"></textarea></label>
         <label>이 채팅의 지침<textarea name="personal" rows="3" enterkeyhint="enter" placeholder="이 채팅에만 적용할 지침"></textarea></label>
@@ -138,7 +138,7 @@
   </dialog>
   <dialog id="backup" aria-labelledby="backup-title" aria-describedby="backup-description">
     <header class="dialog-head"><h2 id="backup-title">대화 백업</h2><button class="icon-button" id="close-backup" type="button" aria-label="대화 백업 닫기"><svg><use href="#i-x"/></svg></button></header>
-    <p class="dialog-copy" id="backup-description">저장된 대화, 사용량, 지침을 JSON 파일로 옮길 수 있어요. 가져오면 기존 대화에 빠진 메시지만 추가해요.</p>
+    <p class="dialog-copy" id="backup-description">저장된 대화, 사용량, 지침을 JSON 파일로 옮길 수 있어요. 같은 대화에서는 새 메시지와 메시지 삭제 기록을 반영해요.</p>
     <div class="dialog-actions backup-actions">
       <button class="outline" id="export-backup" type="button">내보내기</button>
       <button class="primary" id="choose-backup" type="button">가져오기</button>
